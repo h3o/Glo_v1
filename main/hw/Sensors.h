@@ -1,0 +1,38 @@
+/*
+ * Sensors.h
+ *
+ *  Created on: 13 Mar 2019
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of CC-BY-NC-SA license.
+ *  It must not be distributed separately.
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/gechologists/
+ *
+ */
+
+#ifndef SENSORS_H_
+#define SENSORS_H_
+
+#include <hw/init.h>
+#include <hw/gpio.h>
+
+#ifdef BOARD_GECHO
+
+#define IR_SENSORS 4
+#define SENSORS_MEASURE_DELAY 	10		//10ms between changing state, which results by close to 50Hz frequency (at 0 cycle delay)
+//#define SENSORS_MEASURE_DELAY 	50		//50ms between changing state, which results by close to 10Hz frequency (at 0 cycle delay)
+#define SENSORS_CYCLE_DELAY		20		//delay between two measurements, saves energy
+#define SENSORS_MAX_VALUE		4096.0f	//for recalculation to 0..1 float
+
+void gecho_sensors_init();
+//void gecho_sensors_test();
+
+void process_sensors(void *pvParameters);
+
+#endif /* BOARD_GECHO */
+
+#endif /* SENSORS_H_ */

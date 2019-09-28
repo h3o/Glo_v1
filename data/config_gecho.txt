@@ -1,0 +1,454 @@
+[global_settings]
+
+TUNING_MIN					391.9954359818
+TUNING_MAX					493.8833012561
+
+//TUNING_INCREASE_COEFF		1.0028922878693670715023923823933	//5 cents, 240th root of 2
+TUNING_INCREASE_COEFF		1.0057929410678534309188527497122	//10 cents, 120th root of 2
+//TUNING_INCREASE_COEFF		1.0116194403019224846862305670455	//20 cents, 60th root of 2
+//TUNING_INCREASE_COEFF		1.0145453349375236414538678576629	//25 cents, 48th root of 2
+
+AUTO_POWER_OFF_TIMEOUT				3600 //in seconds
+AUTO_POWER_OFF_ONLY_IF_NO_MOTION	1 //1=enabled, 0=disabled			
+
+[channels]
+
+1:high_pass:22,0,2,1.0,settings=1,binaural=1			//Rachel's song, sea 1+2 (water element)
+2:low_pass_high_reso:4,4,4,settings=1,binaural=2		//Air on the G string, forest (earth element)
+3:low_pass:2,2,settings=1,binaural=3					//Epic ad song, wind (wind element)
+4:high_pass:21,21,6,0.5,settings=1,binaural=4			//GITS, creek, lower bg sample volume (alternative water element)
+
+11:white_noise:settings=1					//pure white noise
+12:antarctica:settings=1					//song of wind and ice
+
+31:direct_waves:1,settings=1,binaural=5				//space channel with reverb (fire element)
+32:direct_waves:0,settings=1,binaural=6				//space channel, no reverb (alternative fire element)
+33:dco:settings=2							//DCO synth (seasick Jonah)
+
+231:drum_kit:settings=2						//drum kit
+
+331:pass_through_mics:settings=1
+332:pass_through_linein:settings=1
+333:midi_in_test:settings=1
+334:sync_out_test:settings=1
+
+3311:sd_card_info
+3312:sd_card_speed_test
+3313:sd_card_file_list
+
+431:dekrispator:settings=2					//dekrispator
+432:clouds:settings=2						//Mutable Instruments Clouds port
+
+421:reverb:settings=2						//decaying reverb
+411:granular:settings=2						//granular sampler
+441:bytebeat:settings=2						//bytebeat
+
+[binaural_beats_by_channel]
+
+1:delta		//deep sleep - sea 1+2 (water element)
+2:alpha		//feel positive - forest (earth element)
+3:theta		//meditation - wind (wind element)
+4:beta		//concentration - creek (alternative water element)
+5:beta		//concentration - space with reverb (fire element)
+6:beta		//concentration - space (alternative fire element)
+
+//Alpha: 7.5 to 12.5 Hz, good for relaxation 
+//Beta: 12.5 to 30 Hz, help with concentration 
+//Delta: 0.5 to 4 Hz, helps with dreamless deep sleep 
+//Theta: 4 to 7 Hz, helps to achieve deep meditation and boost creativity
+
+[binaural_beats_program]
+
+//format is "wave:[time(sec),frequency_difference(hz);...]" ramping is calculated automatically a few times per second
+alpha:[0,0; 30,7.5; 60,12.5; 90,9; 180,7.5; 360,12.5; 420:0]
+beta:[0,0; 30,12.5; 60,30; 90,19; 180,12.5; 360,30; 420:0]
+delta:[0,0; 30,0.5; 60,4; 90,1; 180,2; 360,4; 420:0]
+theta:[0,0; 30,4; 60,7; 90,5; 180,4; 360,7; 420:0]
+
+[samples_map]
+
+//_all_samples.bin version 09 - total length 7264532
+1: 0,1015016		//01_sea1_10s_fix.bin
+3: 1015016,2053340	//02_sea2_20s.bin
+5: 3068356,1977504	//03_voiceover_01.bin
+4: 5045860,979300	//04_forest_spring.bin
+6: 6025160,311664	//05_water.bin
+10: 6336824,697616	//06_voice.bin
+9: 7034440,230092	//07_drums.bin
+
+//combined samples
+2: 0,3068356		//sea1+sea2
+7: 1015016,4030844	//sea2+voiceover
+8: 3068356,2956804	//voiceover+forest
+
+[songs]
+
+song=1 //intro ad
+a2c5e3,a3c5e4,a3c4e3,a3c5e4,d4f#4a4,e4g#4b4,a4c#5e5,a4c#5e6
+
+melody=1
+a3. c4. e4. a3. c4. e4. a3. c4.
+e4. a4. c4. e4. a4. c5. e5. a5.
+d4 f#4 a4 d5....
+e4 g#4 b4 e5....
+a5 e5 c#5. e5 c#5. a4. c#5 a4 e4 a4 e4 c#4.
+
+song=2 //epic ad
+c#4e3g#2,c#4e4g#3,b3e4g#3,a2c#4e4,c#4e3g#4,c#3e4g#5,b2e4g#4,a3c#4e5,
+a3c#4e4,a3c#3e4,b2d#4f#5,b3d#4f#4,f#2a4c#5,f#3a4c#5,f#3a4c#5,f#3a4c#4,	//1
+a3c#3e4,a3c#4e4,b3d#3f#4,b3d#4f#4,g#3c4d#3,g#4c4d#4,g#4c5d#5,g#4c4d#4,	//2
+c#2e3g#3,c#2e3g#4,a2c#3e3,a2c#4e4,b2d#3f#5,b3d#4f#5,f#3a4c#4,f#3a4c#5,	//repeats
+c#2e4g#4,c#3e3g#4,b3d#3f#4,b3d#4f#4,c#3e4g#5,c#3e4g#5,b4d#5f#5,b4d#4f#3, //last
+a3c#4e4,a2c#3e4,b2d#4f#5,b3d#4f#4,f#2a4c#5,f#3a4c#5,f#3a4c#4,f#3a3c#4,	//1
+a3c#3e4,a3c#4e4,b3d#3f#4,b3d#4f#4,g#3c4d#4,g#2c4d#4,g#2c4d#5,g#2c3d#4	//2
+
+melody=2
+b4 g#4 f#4 e4 b4 g#4 f#4 e4 b4 g#4 f#4 e4 b4 g#4 f#4 e4
+b3 g#3 f#3 e3 b3 g#3 f#3 e3 b5 g#5 f#5 e5 b5 g#5 f#5 e5
+b4 g#4 f#4 e4 b4 g#4 f#4 e4 b4 g#4 f#4 e4 b4 g#4 f#4 e4
+b3 g#3 f#3 e3 b3 g#3 f#3 e3 b5 g#5 f#5 e5 b5 g#5 f#5 e5
+c#5.. e5.... e5.. d#5.. b4. d#4.. e4............
+c#5.. e5.... e5.. d#5.. b4. g#4...............
+c#4.. e4........ d#4. b3. c#4.. e4........ d#4. b3.
+c#5.. e5........ d#5. b4. c#5.. e5........ d#5. b4.
+
+song=3 //whale main ad
+f3a3c4,a3c4e4,g3b3d4,d4f4a4,
+f4a3c4,a3c4e4,g4b3d4,b3d4g4,
+a3c4e4,b3d4e4,g3c4e4,a3d4e4,
+a3c4e4,g3a3g4,f3a3c4,c4e4g4,
+
+f3a3c4,a3c4e4,g3b3d4,d4f3a4,
+f3a3c4,c4e4g4,d4f#4a3,e4g#4b3,
+f3a3c4,a3c4e4,c4e4g4,g4b3d4
+
+song=4 //J.S.Bach - Air on the G string
+
+d4f#4a4,c#4f#4a4,b3d4f#4,a3d4f#4,g3b3d4,g#3b3d4,a3c#4e4,g3c#4e4,
+f#4a4c4,e4a4c4,d#4a4c4,b3d#4f#4,e4g4b4,d4g4b4,c#4e4g4,a3c#4e4,
+d4f#4a4,c#4f#4a4,b3d4f#4,g#3b3d4,a3c#4e4,g#3c#4e4,a3c#4e4,a4c#4e4
+
+melody=4
+d4...d5...c#5...c#4... b3...b4...a4...a3... g3...b4.g4.e4.d4.c#4.d4. c#4.......b3.a3.....
+a5.................f#5.c5.b4.e5.d#5.a5.g5.
+g5.................e5.b4.a4.d5.c#5.g5.f#5.
+f#5...........g#5.a5.d5...d5e5f#5.
+f#5.e5.e5.d5.c#5.b4.b4c#5d5.d5...c#5.b4.a4...............
+
+//Songs 5-10: empty
+
+song=11 //main demo song
+a2c5e3,a3c5e4,a3c4e3,a3c5e4,d4f#4a4,e4g#4b4,a4c#5e5,a4c#5e6,
+a2c5e3,a3c5e4,a3c4e3,a3c5e4,d4f#4a4,e4g#4b4,a4c#5e5,a4c#5e6,
+a3c4e4,b3d4g4,c4e4g4,d4f4a4,e4g#4b4,f4a4c4,g4b4d5,g3b4d6,
+a2c5e3,b3d5g4,c4e4g4,d3f5a4,e4g#4b4,f4a4c4,g4b5d5,g4b4d4,
+g#4c5d#5,f4g#4c5,d4f4g#4,b3d4f4,g4b4d5,f4g#4c4,d#4g4a#4,d3g4b4,
+a3c4e4,b3d4g4,c4e4g4,d4f4a4,e4g#4b4,f4a4c4,g4b4d5,g3b4d6,
+a2c5e3,b3d5g4,c3e4g3,d3f5a4,e4g#4b4,f4a4c4,g4b5d5,g4b5d3,
+a3c6e4,a4c6e5,a4c3e4,a4c5e4,d4f#5a4,e4g#5b4,a4c#5e5,a4c#5e4
+
+song=12 //Johann Pachelbel - Canon in D
+d3f#3a3,a3c#4e4,b3d4f#4,f#3b3c#4,g3b3d4,d4f#4a4,e4g4b3,a3c#4e4 //lower octave
+//d4f#4a4,a4c#5e5,b4d5f#5,f#4b4c#5,g4b4d5,d5f#5a5,e5g5b4,a4c#5e5 //higher octave
+
+song=13 //Mario's composition
+f3g#3c4,f3g#4c4,c#3f3g#3,c#4f3g#4,c4e#4g4,c4e#4g3,a#3c#3f3,a#3c#3f4
+
+song=14 //xmas song
+c4e3g2,c4e2g3,c4e3g3,c4e2g3,c4f4a3,c4e3g4,d4f4a4,g3b3d4,
+c4e3g4,c4e3g3,c3e4g3,c4e3g4,c3f2a4,c3e4g3,g3b3d4,c4e3g3,
+c3e3g4,c4e4g4,c3e3g4,a3c4f4,a4c3f4,g3b3d4,g3b4d4,c2e3g4,
+c4e3g4,c4e3g2,c3e2g4,a3c4f3,a4c3f4,g3b2d4,g3b2d4,c2e3g3
+
+melody=14
+e5e5e5. e5e5e5. e5g5c5d5 e5... f5f5f5f5 f5e5e5. e5d5d5e5 d5...
+e4e4e4.e4e4e4.e4g4c4d4e4...f4f4f4f4f4e4e4.g4g4f4d4c4...
+g4e5d5c5g4...g4e5d5c5a4...a4f5e5d5g5g5g5.a5g5f5d5e5...
+g3e4d4c4g3...g3e4d4c4a3...a3f4e4d4g4g4g4.a4g4f4d4c4...
+
+//Songs 15-20: empty
+
+song=21 //GITS
+a3c4e4,a3c4e4,a3e4c4,e3a3c4,a3c4e4,a3e4c4,a3c4e4,g3d4b3, //main
+f3a3c4,f3c4a3,f3a3c4,f3a3c4,a3f3c4,a3f4c3,a3e4c4,e4a3c4,
+e3g3b3,e3b3g3,f3a3c4,f3c4a3,a3c4e4,b3d4g4,c4e4a4,d4g4b4,
+f4a4c5,f4a4c5,e4g#4b4,e4g#4b4,
+
+a3c4e4,b3d4f#4,e3g3b3,e4g4b3,a3c4e4,b3f#4d4,e4f#3d4,e4f#4b3, //int 1
+a3c4e4,b3d4f#4,e3g3b3,e4g4b3,a3c4e4,b3f#4d4,e4f#4b3,e4g#4b3,
+a3c4e4,a4c4e4,b3d4f#4,b4d4f#4,c4e4g4,c4g4e4,b3e4f#4,b3d#4f#4,
+
+a3c4e4,a3c4e4,a3e4c4,e3a3c4,a3c4e4,a3e4c4,a3c4e4,g3d4b3, //main
+f3a3c4,f3c4a3,f3a3c4,f3a3c4,a3f3c4,a3f4c3,a3e4c4,e4a3c4,
+e3g3b3,e3b3g3,f3a3c4,f3c4a3,a3c4e4,b3d4g4,c4e4a4,d4g4b4,
+f4a4c5,f4a4c5,e4g#4b4,e4g#4b4,
+
+d3f4a4,e3g#4b4,a4c4e3,a4c4e3,
+f3a4c4,e4g#4b4,a3c4e4,a4c4e4,
+d3f4a4,e3g#4b4,a4c4e3,a4c4e3,
+f3a4c4,f3a4c4,d3f4a4,a#3d4f4,
+a3c4e4,a4c4e4,a3c4e4,a4c4e4
+
+melody=21
+a4.....b4c5 d5......d#5 d5....... ......b4. c5....... ....c5b4a4g4 a4....... ......g4. //main
+a4.....b4c5 d5......d#5 d5....... ......b4. c5....... ....c5b4a4g4 a4....... ......g4.
+f#4...e4... f#4.....g4. a4...g4... a4.b4.c5.d5. e5.....e5. d5...b4... e5.....e5. d5...b4...
+e5....... ....d5... e5....... ........
+
+e4...d4e4.b4 f#4...b3... g4....f#4g4a4 b4..e5g5f#5.b4 //int 1
+a4...e5... d5...f#5.d5b4 a4....... ........
+e4...d4e4.b4 f#4...b3... g4....f#4g4a4 b4..e5g5f#5.b4
+a4...e5... d5...b4... e5....... ........
+e5.....d5e5 a4.....e5. f#5.....e5f#5 b4...f#5...
+e5.....d5e5 g4...a4... b4....... e5.e5...g4.
+
+a4.....b4c5 d5......d#5 d5....... ......b4. c5....... ....c5b4a4g4 a4....... ......g4. //main
+a4.....b4c5 d5......d#5 d5....... ......b4. c5....... ....c5b4a4g4 a4....... ......g4.
+f#4...e4... f#4.....g4. a4...g4... a4.b4.c5.d5. e5.....e5. d5...b4... e5.....e5. d5...b4...
+e5....... ....d5... e5....... ........
+
+d5..d5d5.d5. e5.....e5. e5....... ........ //int 2
+d5..d5d5.d5. e5.....e5. e5....... ........
+d5..d5d5.d5. e5.....e5. e5....... ..a4.b4.c5.
+g5...e5... ..g4.a4.e5. c5...a4... d5.......
+e5....... ........ ........ ........
+
+song=22 //Rachel's song
+//g3a#3d3,g3a3d4,g3a#2d3,g3a2d3,
+//g3a#4d4,g3a3d4,g3a#3d4,g4a4d3,
+g3a#3d3,g3a3d4,g3a#2d3,g3a2d3,
+g3a#4d4,g3a3d4,g3a#3d4,g4a4d3,
+g3a#3d4,g3a#4d4,c4e4g3,c4e4g4,
+d4f3a3,d4e4g3,d4e4a3,d4f4a4,
+g3a#3d4,g3a#4d4,c4e4g3,c4e4g4,
+d4f3a3,d4e4g3,d4f4a4,f4d4a4,
+d3f4a3,d3f3a3,d#3g4a#3,d#3g3a#3,
+g3a#3d4,d3f3a4,g3a#3d4,g3a#3d4,
+d3f4a3,d4f3a3,d#3g4a#3,d#4g3a#4,
+g3a#3d4,f3a3c4,g3a#3d4,g4a#3d4
+
+song=23 //Eastern European composition
+a3c4e4,d4f4a4,g4d4b3,c4e4g4,a4c5e5,d5a4f4,g4d4b3,a3c#4e4
+
+song=24
+f3g#3c4,f3g#4c4,c#3f3g#3,c#4f3g#4,a#d#3g3,a#d#3g2,a#2c#3f3,a#3c#3f4 //broken syntax - weirldy cool one
+
+//Songs 25-30: empty
+
+song=31 //Notjustmoreidlechatter by Paul Lansky
+g3a#3d4,d#4g3a#3,g3a#4d4,f3a4c4,g3a#3d4,c4e4g3,g4a#3d4,f4a#3d4,
+g3a#3d4,d#3g3a#3,g3a#4d4,f4a4c4,g3a#3d4,c3e3g3,g3a#3d4,a#3d4g4,
+f3a3c4,g3a#3d4,f4a3c4,d#4g4a#3,d4f#4a3,c4d#4g3,a#4d4f4,a4d4f#3
+
+//Songs 32-34: empty
+
+//Songs 35-40: empty
+
+song=41 //simple chord in A key over more octaves (minor/major)
+a1a2a3,a1a2a3,a3c4e4,a3c4e4,a3c#4e4,a3c#4e4,a3c4e4,a3c4e4,a3c#4e4,a3c#4e4,a3a4a5,a2a3a4,a3a4a5,a2a3a4,a1a2a3,a1a2a3
+
+song=42
+a3c4e4 //a (minor) chord
+
+song=43
+a3c#4e4	//A (major) chord
+
+song=44
+a3a4a5 //one note per 3 octaves
+
+[dekrispator_patches]
+
+//1
+MagicPatch():19,45,84,55,73,29,102,23,3,0,1,37,11,33,126,92,11,47,40,7,1,33,10,110,68,99,11,28,38,56,0,5,66,111,122,56,126,74,62,112,19,
+MagicFX():53,8,40,22,91,111,126,105,32,82,
+
+//2
+MagicPatch():99,45,84,55,73,29,102,23,3,0,1,37,11,33,126,92,11,47,40,7,1,33,10,110,68,99,11,28,38,56,0,5,66,111,122,56,126,74,62,112,19,
+MagicFX():73,23,108,1,27,33,109,29,77,65,
+
+//3 broken 
+MagicPatch():4,39,103,75,104,118,30,16,109,47,18,34,21,32,98,104,90,57,37,10,0,16,114,6,91,98,103,63,25,83,42,86,38,76,22,63,18,64,48,63,20,
+MagicFX():44,28,69,123,106,45,58,86,31,42,
+
+//4 
+MagicPatch():46,99,17,123,77,33,112,19,75,86,32,96,18,48,56,4,28,51,71,58,77,61,49,111,16,92,26,110,104,84,58,77,55,68,97,82,1,41,49,95,106,
+MagicFX():17,24,30,16,99,27,15,55,77,39,
+
+//5 great with envelope, echo and whistling
+MagicPatch():124,11,51,57,39,95,121,29,80,46,3,4,20,15,55,74,74,44,46,99,28,48,72,123,103,46,103,59,120,110,98,9,81,96,23,7,26,103,41,53,125,
+MagicFX():4,34,17,30,122,38,70,34,19,95,
+
+//6 bit spacey and deep but not smooth
+MagicPatch():72,107,105,29,89,27,24,36,90,51,52,87,46,117,90,55,73,41,34,30,116,67,47,19,104,81,93,43,126,90,37,14,43,117,100,69,111,1,32,84,71,
+MagicFX():6,117,102,8,46,107,74,57,42,77,
+
+//7
+MagicPatch():8,39,91,108,19,105,126,72,2,90,61,66,0,11,45,68,71,70,16,105,30,5,62,95,124,25,50,22,59,113,67,38,53,125,57,40,22,78,79,15,51,
+MagicFX():103,59,101,104,82,121,17,23,121,31,
+
+//8 weird steam engine, not smooth 
+MagicPatch():96,32,98,1,33,112,18,66,5,63,20,12,85,100,81,69,115,34,24,31,35,87,65,80,23,109,61,79,15,70,38,54,60,21,29,88,86,36,106,67,37,
+MagicFX():115,18,50,6,104,107,90,66,6,120,
+
+//9 nice deep bass, maybe good for beatboxing
+MagicPatch():49,105,10,114,5,46,3,110,81,79,10,113,87,71,78,102,20,16,103,47,21,29,82,114,109,52,111,16,107,80,31,38,61,47,13,104,93,61,58,55,94,
+MagicFX():12,71,83,19,103,49,99,27,21,49,
+
+//10 melodic minor chords with vibrato, spacey with filters
+MagicPatch():107,75,94,95,17,124,1,26,100,59,99,34,24,26,123,76,1,40,119,67,46,119,61,69,119,51,67,57,19,91,97,85,114,117,102,38,69,1,33,118,11,
+MagicFX():99,20,123,76,13,120,105,1,52,109,
+
+//11 similar, less vibrato
+MagicPatch():107,75,94,95,17,124,1,26,100,59,99,34,24,26,123,76,1,40,119,67,46,119,61,69,119,51,67,57,19,91,97,85,114,117,102,38,69,1,33,118,11,
+MagicFX():34,22,87,44,34,34,27,22,73,10,
+
+//12 bass with voices
+MagicPatch():73,19,74,67,23,113,58,88,89,23,117,99,15,49,89,13,122,60,40,119,58,57,30,120,94,77,55,96,53,123,94,71,72,105,30,126,102,10,8,40,10,
+MagicFX():103,68,89,19,83,48,60,26,87,46,
+
+//13 chaotic chords
+MagicPatch():114,122,68,89,18,32,100,52,88,89,4,37,11,33,123,112,46,95,14,21,32,93,29,99,45,74,44,19,83,18,34,20,114,125,61,44,21,27,14,23,127,
+MagicFX():100,83,47,26,115,25,54,50,33,112,
+
+//14 this one saturates quickly
+MagicPatch():9,87,72,109,28,45,82,7,127,126,82,117,91,82,122,38,41,28,71,64,49,85,118,10,109,39,93,40,120,99,22,71,78,83,29,79,119,70,26,110,86,
+MagicFX():61,46,100,62,118,40,6,101,124,119,
+
+//15 sounds interesting with filters off, need to try with echo, similar to 5
+MagicPatch():87,51,39,86,25,78,93,38,64,35,83,48,48,76,123,105,24,38,73,26,85,1,28,73,18,45,71,69,122,74,63,18,40,27,14,20,115,43,109,35,53,
+MagicFX():17,31,26,88,104,93,52,89,10,19,
+
+//16 nice with echo, filters off - distant rave party, good for beatboxing
+MagicPatch():125,27,23,7,18,47,42,95,115,36,112,36,101,91,82,117,118,41,58,58,83,48,59,99,49,94,77,40,10,114,8,63,29,102,34,45,81,93,50,29,87,
+MagicFX():117,99,36,104,109,26,110,93,63,17,
+
+//17 similar but less smooth
+MagicPatch():73,36,119,77,58,70,23,4,37,4,14,40,120,90,42,93,65,80,37,35,88,112,48,75,110,66,4,17,3,107,89,27,1,20,8,63,0,11,49,105,125,
+MagicFX():117,99,36,104,109,26,110,93,63,17,
+
+//18 nice with voice and echo, filters off, bit broken
+MagicPatch():73,36,119,77,58,70,23,4,37,4,14,40,120,90,42,93,65,80,37,35,88,112,48,75,110,66,4,17,3,107,89,27,1,20,8,63,0,11,49,105,125,
+MagicFX():15,46,3,112,55,76,26,105,7,1,
+
+//19 nice chorus/chopper
+MagicPatch():5,81,76,124,121,3,127,124,115,20,110,92,10,14,18,47,30,15,57,28,40,23,107,105,7,123,109,56,115,20,18,52,97,95,120,93,55,79,23,104,118,
+MagicFX():15,46,3,112,55,76,26,105,7,1,
+
+//20 similarly cool
+MagicPatch():5,81,76,124,121,3,127,124,115,20,110,92,10,14,18,47,30,15,57,28,40,23,107,105,7,123,109,56,115,20,18,52,97,95,120,93,55,79,23,104,118,
+MagicFX():15,52,96,25,64,57,21,42,72,99,
+
+//21 major chords
+MagicPatch():42,103,68,73,10,117,126,87,55,64,33,115,42,71,74,61,47,41,37,1,26,85,119,42,102,36,120,90,66,13,102,4,25,77,68,73,33,3,121,12,84,
+MagicFX():15,52,96,25,64,57,21,42,72,99,
+
+//22 rocket launch
+MagicPatch():42,103,68,73,10,117,126,87,55,64,33,115,42,71,74,61,47,41,37,1,26,85,119,42,102,36,120,90,66,13,102,4,25,77,68,73,33,3,121,12,84,
+//MagicFX():62,85,100,83,26,123,106,69,4,15, //(backup, probably not this)
+MagicFX():7,124,2,66,8,44,17,15,79,21, //(this)
+//MagicFX():60,23,103,50,126,90,43,112,38,47, //(backup, probably not this)
+
+//23 spacey
+MagicPatch():126,104,109,34,14,42,86,31,28,36,93,58,83,19,92,0,12,95,1,26,117,106,52,103,79,11,27,22,86,20,118,14,19,82,112,49,100,86,6,116,73,
+MagicFX():12,63,121,4,8,52,81,69,11,52,
+
+//24 bassline chopper, bit broken
+MagicPatch():34,44,55,100,82,122,60,16,117,117,113,78,101,113,80,36,93,62,113,59,94,100,75,118,37,1,26,85,4,18,35,62,89,4,37,1,36,116,60,20,17,
+MagicFX():57,21,43,1,35,54,48,58,74,70,
+
+//25 cool echoing chopper
+MagicPatch():34,44,55,100,82,122,60,16,117,117,113,78,101,113,80,36,93,62,113,59,94,100,75,118,37,1,26,85,4,18,35,62,89,4,37,1,36,116,60,20,17,
+MagicFX():113,74,45,85,113,72,94,96,47,25,
+
+//26
+//MagicFX():59,124,16,103,59,101,96,50,20,2, //(probably skipped)
+MagicPatch():34,44,55,100,82,122,60,16,117,117,113,78,101,113,80,36,93,62,113,59,94,100,75,118,37,1,26,85,4,18,35,62,89,4,37,1,36,116,60,20,17,
+MagicFX():110,101,104,97,73,35,77,68,90,62, //(interesting too, recorded)
+
+//27 extreme modulation
+MagicPatch():22,67,39,84,87,55,97,75,87,58,90,35,89,2,92,122,58,88,115,24,35,74,51,61,61,54,46,109,48,69,124,1,40,6,120,110,78,93,48,60,22,
+MagicFX():104,110,76,12,80,28,54,47,25,75,
+
+//turning off envelope (filters still off)
+
+//28 aliens talking
+MagicPatch():77,66,8,49,113,93,48,48,76,18,40,19,102,37,31,25,79,8,65,92,13,117,95,6,110,104,96,34,46,5,81,67,34,40,120,92,114,8,56,124,116,
+MagicFX():58,89,14,17,126,102,20,12,92,125,
+
+//29 deep sharp bass
+MagicPatch():102,28,58,75,89,18,40,22,73,17,27,124,12,92,118,39,85,121,24,17,12,69,12,71,67,44,37,11,37,32,71,67,27,19,73,9,84,91,114,104,90,
+MagicFX():1,30,118,10,119,42,79,16,94,74,
+
+//30 spacey bells
+MagicPatch():97,93,38,47,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
+MagicFX():62,89,0,2,76,20,14,12,65,84,
+
+//31 space frogs
+MagicPatch():50,1,27,124,19,100,60,8,32,72,122,63,13,100,51,70,15,62,115,43,106,71,73,11,40,18,68,96,20,11,49,118,7,7,4,30,124,13,115,44,40,
+MagicFX():91,109,38,57,25,49,115,23,123,93,
+
+//32 wobbling bass
+MagicPatch():47,30,7,30,5,62,87,47,14,11,44,46,104,107,111,123,76,19,81,68,79,12,71,89,126,94,70,35,61,74,80,48,55,78,91,84,91,87,62,98,111,
+MagicFX():4,26,117,1,52,100,54,32,82,113,
+
+//33 random bass and leads
+MagicPatch():12,67,37,7,9,78,105,32,88,89,31,32,69,102,38,53,18,46,116,52,89,13,118,26,119,62,109,30,16,119,76,3,126,73,28,51,41,60,15,60,29,
+MagicFX():15,76,30,22,66,121,24,38,57,41,
+
+//34 warped aliens talking
+MagicPatch():24,34,43,116,87,63,11,44,27,31,24,44,37,23,3,2,94,98,4,13,109,44,46,2,90,40,127,116,50,9,105,16,101,92,18,67,41,56,104,103,67,
+MagicFX():44,33,2,76,7,16,104,117,108,115,
+
+//35 too complex to run at any setting
+MagicPatch():8,45,92,115,47,38,63,16,108,126,79,13,98,125,57,38,51,69,110,77,63,17,12,90,36,111,123,85,96,37,4,39,91,97,78,92,2,92,22,83,20,
+MagicFX():26,108,127,126,94,71,55,76,4,10,
+
+//36 echoing space bells
+MagicFX():9,77,65,98,99,15,77,64,67,44,
+MagicPatch():83,46,5,77,68,95,5,58,62,90,44,25,48,78,101,98,119,53,121,27,9,72,120,111,1,29,94,70,43,16,96,21,39,96,37,28,53,123,80,47,38,
+
+//37 oversaturated static 
+MagicPatch():51,47,38,65,84,86,24,11,39,110,86,42,91,80,56,113,92,14,42,98,99,24,45,85,118,21,38,45,63,6,106,51,42,91,75,106,60,40,126,97,62,
+MagicFX():27,22,62,82,122,49,89,17,17,32,
+
+
+[something_else]
+
+//dummy patch #1 
+MagicPatch():1,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
+MagicFX():1,0,0,0,76,20,14,12,65,84,
+
+//dummy patch #2
+MagicPatch():2,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
+MagicFX():2,0,0,0,76,20,14,12,65,84,
+
+//dummy patch #3
+MagicPatch():3,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
+MagicFX():3,0,0,0,76,20,14,12,65,84,
+
+//dummy patch #4
+MagicPatch():4,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
+MagicFX():4,0,0,0,76,20,14,12,65,84,
+
+[end]
+
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
+-------------------------------------
