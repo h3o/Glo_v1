@@ -6,9 +6,9 @@
 # in the build directory. This behaviour is entirely configurable,
 # please read the ESP-IDF documents if you need to do this.
 #
-COMPONENT_INCLUDES += E:/dev/ESP32/workspace/whale-v150/main
-COMPONENT_INCLUDES += E:/dev/ESP32/workspace/whale-v150/main/hw
-COMPONENT_INCLUDES += E:/dev/ESP32/workspace/whale-v150/main/dsp
-COMPONENT_INCLUDES += E:/dev/ESP32/workspace/whale-v150/main/dkr
-COMPONENT_INCLUDES += E:/dev/ESP32/workspace/whale-v150/main/mi/clouds
-COMPONENT_INCLUDES += E:/dev/ESP32/esp-idf/components
+COMPONENT_INCLUDES += $(GLO_PATH)/main
+COMPONENT_INCLUDES += $(GLO_PATH)/main/hw
+COMPONENT_INCLUDES += $(GLO_PATH)/main/dsp
+COMPONENT_INCLUDES += $(GLO_PATH)/main/dkr
+COMPONENT_INCLUDES += $(GLO_PATH)/main/mi/clouds
+COMPONENT_INCLUDES += $(IDF_PATH)/components
