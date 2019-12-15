@@ -18,7 +18,7 @@
 #define GPIO_H_
 
 #include <stdbool.h>
-#include "E:\dev\ESP32\esp-idf\components\driver\include\driver\gpio.h"
+#include "driver/include/driver/gpio.h"
 #include "board.h"
 
 //esp-32
