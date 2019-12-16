@@ -3,11 +3,11 @@
 #include "init.h"
 #include "gpio.h"
 
-#include "E:\dev\ESP32\esp-idf\components\fatfs\src\esp_vfs_fat.h"
-#include "E:\dev\ESP32\esp-idf\components\driver\include\driver\sdmmc_host.h"
-#include "E:\dev\ESP32\esp-idf\components\driver\include\driver\sdspi_host.h"
-#include "E:\dev\ESP32\esp-idf\components\sdmmc\include\sdmmc_cmd.h"
-#include "E:\dev\ESP32\esp-idf\components\vfs\include\sys\dirent.h"
+#include "fatfs/src/esp_vfs_fat.h"
+#include "driver/include/driver/sdmmc_host.h"
+#include "driver/include/driver/sdspi_host.h"
+#include "sdmmc/include/sdmmc_cmd.h"
+#include "vfs/include/sys/dirent.h"
 #include <sys/stat.h>
 #include <sys/unistd.h>
 #include <string.h>

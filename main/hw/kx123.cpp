@@ -14,10 +14,10 @@
 */
 //#include "RegisterWriter/RegisterWriter/rohm_hal2.h"
 //#include "RegisterWriter/RegisterWriter/RegisterWriter.h"
-#include "driver\i2c.h"
+#include "driver/i2c.h"
 #include "init.h"
-#include "freertos\FreeRTOS.h"
-#include "freertos\FreeRTOSConfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/FreeRTOSConfig.h"
 #include "sdkconfig.h"
 
 #include "kx123.h"
