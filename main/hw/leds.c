@@ -16,200 +16,58 @@
 
 #include "leds.h"
 #include "gpio.h"
-//#include "codec.h"
-//#include "controls.h"
-//#include "sensors.h"
+#include "ui.h"
+#include "midi.h"
+#include <Binaural.h>
 
 #ifdef BOARD_GECHO
 
 int sensor_changed[4] = {0,0,0,0};
 int sensor_active[4] = {0,0,0,0};
 
-/*
-int LEDs_ORANGE_seq = -1, LEDs_RED_seq = -1; //cycle-through sequence counter
-int LEDs_timing_seq = 0;
+int sequencer_LEDs_timing_seq = 0;
+uint8_t binaural_LEDs_timing_seq = 0;
 
-int sensor_changed[4] = {0,0,0,0};
-int sensor_active[4] = {0,0,0,0};
-
-void IR_sensors_LED_indicators(int *sensor_values)
+void LED_sequencer_indicators() //int current_chord, int total_chords)
 {
-	if(mode_set_flag)
+	if(settings_indication_in_progress)
 	{
-		return;
-	}
 
-	if((sensor_values[0] > IR_sensors_THRESHOLD_1) || sensor_changed[0]) {
-		LED_R8_all_OFF();
-		sensor_changed[0] = 0;
 	}
-	if((sensor_values[1] > IR_sensors_THRESHOLD_1) || sensor_changed[1]){
-		LED_O4_all_OFF();
-		sensor_changed[1] = 0;
-	}
-	if((sensor_values[3] > IR_sensors_THRESHOLD_1) || sensor_changed[2]){
-		LED_W8_all_OFF();
-		sensor_changed[2] = 0;
-	}
-	if((sensor_values[2] > IR_sensors_THRESHOLD_1) || sensor_changed[3]){
-		LED_B5_all_OFF();
-		sensor_changed[3] = 0;
-	}
+	//else if(menu_indicator_active)
+	//{
 
-	if(SENSOR_THRESHOLD_ORANGE_4) {
-		LED_O4_3_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_3) {
-		LED_O4_2_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_2) {
-		LED_O4_1_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_1) {
-		LED_O4_0_ON;
-		sensor_changed[1] = 1;
-		sensor_active[1] = 1;
-	}
-	else
+	//}
+	else if(context_menu_active)
 	{
-		sensor_active[1] = 0;
-	}
-
-	if(SENSOR_THRESHOLD_RED_8) {
-		LED_R8_7_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_7) {
-		LED_R8_6_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_6) {
-		LED_R8_5_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_5) {
-		LED_R8_4_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_4) {
-		LED_R8_3_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_3) {
-		LED_R8_2_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_2) {
-		LED_R8_1_ON;
-	}
-	if(SENSOR_THRESHOLD_RED_1) {
-		LED_R8_0_ON;
-		sensor_changed[0] = 1;
-		sensor_active[0] = 1;
-	}
-	else
-	{
-		sensor_active[0] = 0;
-	}
-
-	if(SENSOR_THRESHOLD_BLUE_1) {
-		LED_B5_0_ON;
-	}
-	if(SENSOR_THRESHOLD_BLUE_2) {
-		LED_B5_1_ON;
-	}
-	if(SENSOR_THRESHOLD_BLUE_3) {
-		LED_B5_2_ON;
-	}
-	if(SENSOR_THRESHOLD_BLUE_4) {
-		LED_B5_3_ON;
-	}
-	if(SENSOR_THRESHOLD_BLUE_5) {
-		LED_B5_4_ON;
-		sensor_changed[2] = 1;
-		sensor_active[2] = 1;
-	}
-	else
-	{
-		sensor_active[2] = 0;
-	}
-
-	if(SENSOR_THRESHOLD_WHITE_1) {
-		LED_W8_0_ON;
-	}
-	#ifdef CAN_USE_CH340G_LEDS
-	if(SENSOR_THRESHOLD_WHITE_2) {
-		LED_W8_1_ON;
-	}
-	if(SENSOR_THRESHOLD_WHITE_3) {
-		LED_W8_2_ON;
-	}
-	#endif
-	if(SENSOR_THRESHOLD_WHITE_4) {
-		LED_W8_3_ON;
-	}
-	if(SENSOR_THRESHOLD_WHITE_5) {
-		LED_W8_4_ON;
-	}
-	if(SENSOR_THRESHOLD_WHITE_6) {
-#ifdef CAN_BLOCK_SWD_DEBUG
-		LED_W8_5_ON;
-#endif
-	}
-	if(SENSOR_THRESHOLD_WHITE_7) {
-#ifdef CAN_BLOCK_SWD_DEBUG
-		LED_W8_6_ON;
-#endif
-	}
-	if(SENSOR_THRESHOLD_WHITE_8) {
-		LED_W8_7_ON;
-		sensor_changed[3] = 1;
-		sensor_active[3] = 1;
-	}
-	else
-	{
-		sensor_active[3] = 0;
-	}
-}
-
-void LED_sequencer_indicators(int current_chord, int total_chords)
-{
-	LEDs_timing_seq++;
-
-	if(mode_set_flag) //still need to shift sequence on background
-	{
-		//if (tempoCounter % (TEMPO_BY_SAMPLE / 2 )== 0)
-		if (LEDs_timing_seq %2 == 1)
+		//if(context_menu_active==(CONTEXT_MENU_TEMPO/2+CONTEXT_MENU_TEMPO%2))
+		if(last_settings_level==CONTEXT_MENU_TEMPO)
 		{
-			LEDs_RED_next(8, 0);
-		}
-		return;
-	}
-
-	//if (tempoCounter % (TEMPO_BY_SAMPLE / 2 )== 0)
-	if (LEDs_timing_seq %2 == 1)
-	{
-		LEDs_RED_next(8, sensor_active[0]?0:1);
-
-		if(current_chord==0)
-		{
-			current_chord = 8;
-		}
-		if(!sensor_active[1])
-		{
-			LED_O4_set((current_chord-1) / (total_chords/4), 1);
+			LED_R8_set(3, sequencer_LEDs_timing_seq%2==0);
+			LED_R8_set(4, sequencer_LEDs_timing_seq%2==0);
 		}
 	}
-	//else if (tempoCounter % (TEMPO_BY_SAMPLE / 4) == 0)
-	else //if (LEDs_timing_seq %2 == 0)
+	else
 	{
 		if(!sensor_active[0])
 		{
-			LEDs_RED_off();
+			LED_R8_set((sequencer_LEDs_timing_seq/8)%8, sequencer_LEDs_timing_seq%2==0);
 		}
 		if(!sensor_active[1])
 		{
-			LED_O4_all_OFF();
+			LED_O4_set((sequencer_LEDs_timing_seq/2)%4, sequencer_LEDs_timing_seq%2==0);
 		}
 	}
-}
-*/
 
-void display_chord(uint8_t *chord_LEDs, int total_leds)
+	sequencer_LEDs_timing_seq++;
+
+	if(sequencer_LEDs_timing_seq>=64)
+	{
+		sequencer_LEDs_timing_seq=0;
+	}
+}
+
+void display_chord(int8_t *chord_LEDs, int total_leds)
 {
 	/*
 	if(mode_set_flag)
@@ -232,6 +90,7 @@ void display_chord(uint8_t *chord_LEDs, int total_leds)
 	for(int led=0; led<total_leds; led++)
 	{
 		disp_led = chord_LEDs[led];
+		//printf("display_chord(): led #%d = %d\n", led, disp_led);
 
 		if(disp_led < 10 && !sensor_active[3])
 		{
@@ -294,152 +153,6 @@ void display_chord(uint8_t *chord_LEDs, int total_leds)
 	}
 }
 
-/*
-void LEDs_RED_next(int limit, int update_LEDs)
-{
-	LEDs_RED_seq++;
-	if(LEDs_RED_seq==limit)
-	{
-		LEDs_RED_seq = 0;
-	}
-
-	if(!update_LEDs)
-	{
-		return;
-	}
-
-	if(LEDs_RED_seq==0)
-	{
-		LED_R8_0_ON;
-	}
-	else if(LEDs_RED_seq==1)
-	{
-		LED_R8_1_ON;
-	}
-	else if(LEDs_RED_seq==2)
-	{
-		LED_R8_2_ON;
-	}
-	else if(LEDs_RED_seq==3)
-	{
-		LED_R8_3_ON;
-	}
-	else if(LEDs_RED_seq==4)
-	{
-		LED_R8_4_ON;
-	}
-	else if(LEDs_RED_seq==5)
-	{
-		LED_R8_5_ON;
-	}
-	else if(LEDs_RED_seq==6)
-	{
-		LED_R8_6_ON;
-	}
-	else if(LEDs_RED_seq==7)
-	{
-		LED_R8_7_ON;
-	}
-}
-void LEDs_RED_off()
-{
-	if(LEDs_RED_seq==0)
-	{
-		LED_R8_0_OFF;
-	}
-	else if(LEDs_RED_seq==1)
-	{
-		LED_R8_1_OFF;
-	}
-	else if(LEDs_RED_seq==2)
-	{
-		LED_R8_2_OFF;
-	}
-	else if(LEDs_RED_seq==3)
-	{
-		LED_R8_3_OFF;
-	}
-	else if(LEDs_RED_seq==4)
-	{
-		LED_R8_4_OFF;
-	}
-	else if(LEDs_RED_seq==5)
-	{
-		LED_R8_5_OFF;
-	}
-	else if(LEDs_RED_seq==6)
-	{
-		LED_R8_6_OFF;
-	}
-	else if(LEDs_RED_seq==7)
-	{
-		LED_R8_7_OFF;
-	}
-}
-
-void LEDs_ORANGE_next(int limit)
-{
-	if(mode_set_flag)
-	{
-		return;
-	}
-
-	LEDs_ORANGE_seq++;
-	if(LEDs_ORANGE_seq==limit)
-	{
-		LEDs_ORANGE_seq = 0;
-	}
-
-	if(LEDs_ORANGE_seq==0)
-	{
-		LED_O4_0_ON;
-	}
-	else if(LEDs_ORANGE_seq==1)
-	{
-		LED_O4_1_ON;
-	}
-	else if(LEDs_ORANGE_seq==2)
-	{
-		LED_O4_2_ON;
-	}
-	else if(LEDs_ORANGE_seq==3)
-	{
-		LED_O4_3_ON;
-	}
-}
-
-void LEDs_ORANGE_off()
-{
-	if(mode_set_flag)
-	{
-		return;
-	}
-
-	if(LEDs_ORANGE_seq==0)
-	{
-		LED_O4_0_OFF;
-	}
-	else if(LEDs_ORANGE_seq==1)
-	{
-		LED_O4_1_OFF;
-	}
-	else if(LEDs_ORANGE_seq==2)
-	{
-		LED_O4_2_OFF;
-	}
-	else if(LEDs_ORANGE_seq==3)
-	{
-		LED_O4_3_OFF;
-	}
-}
-
-void LEDs_ORANGE_reset()
-{
-	LEDs_ORANGE_off();
-	LEDs_ORANGE_seq=-1;
-}
-*/
-
 void LED_W8_all_ON()
 {
 	LED_W8_0_ON;
@@ -492,6 +205,16 @@ void LED_R8_all_OFF()
 	LED_R8_6_OFF;
 	LED_R8_7_OFF;
 }
+
+void LEDs_all_OFF()
+{
+	LED_W8_all_OFF();
+	LED_B5_all_OFF();
+	LED_O4_all_OFF();
+	LED_R8_all_OFF();
+}
+
+
 
 void LED_R8_set(int led, int status)
 {
@@ -635,10 +358,11 @@ void LED_W8_set_byte_RL(int value)
 void all_LEDs_test() // todo: combine w noise
 {
 	int led_test_counter = 0;
+	channel_running = 1;
 
 	//while(led_test_counter < 700000) {
-	while(1) {
-
+	while(!event_next_channel)
+	{
 		led_test_counter++;
 
 		if(led_test_counter%1000000==0){
@@ -760,6 +484,7 @@ void all_LEDs_test() // todo: combine w noise
 
 		//check_for_reset();
 	}
+	channel_running = 0;
 }
 
 //#define LED_TEST_DELAY 250
@@ -778,8 +503,10 @@ void all_LEDs_test_seq1()
 	LED_B5_all_OFF();
 	LED_W8_all_OFF();
 
-	while(1) {
+	channel_running = 1;
 
+	while(!event_next_channel)
+	{
 		LED_RDY_ON;
 
 		//row 1
@@ -897,6 +624,7 @@ void all_LEDs_test_seq1()
 
 		LED_SIG_OFF;
 	}
+	channel_running = 0;
 }
 
 void all_LEDs_test_seq2()
@@ -913,8 +641,10 @@ void all_LEDs_test_seq2()
 	LED_B5_all_OFF();
 	LED_W8_all_OFF();
 
-	while(1) {
+	channel_running = 1;
 
+	while(!event_next_channel)
+	{
 		//row 1
 		LED_R8_0_OFF;
 		Delay(LED_TEST_DELAY);
@@ -1019,61 +749,62 @@ void all_LEDs_test_seq2()
 		Delay(LED_TEST_DELAY);
 		LED_W8_7_ON;
 	}
+	channel_running = 0;
 }
-/*
-void KEY_LED_on(int note)
+
+void KEY_LED_on_off(int note, int on_off)
 {
 	if(note==1)
 	{
-		KEY_C_ON;
+		on_off?KEY_C_ON:KEY_C_OFF;
 	}
 	else if(note==2)
 	{
-		KEY_Cis_ON;
+		on_off?KEY_Cis_ON:KEY_Cis_OFF;
 	}
 	else if(note==3)
 	{
-		KEY_D_ON;
+		on_off?KEY_D_ON:KEY_D_OFF;
 	}
 	else if(note==4)
 	{
-		KEY_Dis_ON;
+		on_off?KEY_Dis_ON:KEY_Dis_OFF;
 	}
 	else if(note==5)
 	{
-		KEY_E_ON;
+		on_off?KEY_E_ON:KEY_E_OFF;
 	}
 	else if(note==6)
 	{
-		KEY_F_ON;
+		on_off?KEY_F_ON:KEY_F_OFF;
 	}
 	else if(note==7)
 	{
-		KEY_Fis_ON;
+		on_off?KEY_Fis_ON:KEY_Fis_OFF;
 	}
 	else if(note==8)
 	{
-		KEY_G_ON;
+		on_off?KEY_G_ON:KEY_G_OFF;
 	}
 	else if(note==9)
 	{
-		KEY_Gis_ON;
+		on_off?KEY_Gis_ON:KEY_Gis_OFF;
 	}
 	else if(note==10)
 	{
-		KEY_A_ON;
+		on_off?KEY_A_ON:KEY_A_OFF;
 	}
 	else if(note==11)
 	{
-		KEY_Ais_ON;
+		on_off?KEY_Ais_ON:KEY_Ais_OFF;
 	}
 	else if(note==12)
 	{
-		KEY_H_ON;
+		on_off?KEY_H_ON:KEY_H_OFF;
 	}
 	else if(note==13)
 	{
-		KEY_C2_ON;
+		on_off?KEY_C2_ON:KEY_C2_OFF;
 	}
 }
 
@@ -1082,7 +813,7 @@ void KEY_LED_all_off()
 	LED_W8_all_OFF();
 	LED_B5_all_OFF();
 }
-*/
+
 void display_number_of_chords(int row1, int row2)
 {
 	LED_R8_0_ON;
@@ -1260,6 +991,16 @@ void display_BCD_numbers(char *digits, int length)
 
 void display_IR_sensors_levels()
 {
+	if(context_menu_active && context_menu_active!=CONTEXT_MENU_ALLOW_LEDS)
+	{
+		//reset active flags to not interfere with chord indication
+		//sensor_active[0] = 0;
+		//sensor_active[1] = 0;
+		sensor_active[2] = 0;
+		sensor_active[3] = 0;
+		return;
+	}
+
 	if((ir_res[0] > IR_sensors_THRESHOLD_1) || sensor_changed[0]) {
 		LED_R8_all_OFF();
 		sensor_changed[0] = 0;
@@ -1268,32 +1009,14 @@ void display_IR_sensors_levels()
 		LED_O4_all_OFF();
 		sensor_changed[1] = 0;
 	}
-	if((ir_res[3] > IR_sensors_THRESHOLD_1) || sensor_changed[2]) {
-		LED_W8_all_OFF();
+	if((ir_res[2] > IR_sensors_THRESHOLD_1) || sensor_changed[2]) {
+		LED_B5_all_OFF();
 		sensor_changed[2] = 0;
 	}
-	if((ir_res[2] > IR_sensors_THRESHOLD_1) || sensor_changed[3]) {
-		LED_B5_all_OFF();
-		sensor_changed[3] = 0;
-	}
 
-	if(SENSOR_THRESHOLD_ORANGE_4) {
-		LED_O4_3_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_3) {
-		LED_O4_2_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_2) {
-		LED_O4_1_ON;
-	}
-	if(SENSOR_THRESHOLD_ORANGE_1) {
-		LED_O4_0_ON;
-		sensor_changed[1] = 1;
-		sensor_active[1] = 1;
-	}
-	else
-	{
-		sensor_active[1] = 0;
+	if((ir_res[3] > IR_sensors_THRESHOLD_1) || sensor_changed[3]) {
+		LED_W8_all_OFF();
+		sensor_changed[3] = 0;
 	}
 
 	if(SENSOR_THRESHOLD_RED_8) {
@@ -1324,7 +1047,34 @@ void display_IR_sensors_levels()
 	}
 	else
 	{
+		if(sensor_active[0])
+		{
+			sensor_changed[0] = 1;
+		}
 		sensor_active[0] = 0;
+	}
+
+	if(SENSOR_THRESHOLD_ORANGE_4) {
+		LED_O4_3_ON;
+	}
+	if(SENSOR_THRESHOLD_ORANGE_3) {
+		LED_O4_2_ON;
+	}
+	if(SENSOR_THRESHOLD_ORANGE_2) {
+		LED_O4_1_ON;
+	}
+	if(SENSOR_THRESHOLD_ORANGE_1) {
+		LED_O4_0_ON;
+		sensor_changed[1] = 1;
+		sensor_active[1] = 1;
+	}
+	else
+	{
+		if(sensor_active[1])
+		{
+			sensor_changed[1] = 1;
+		}
+		sensor_active[1] = 0;
 	}
 
 	if(SENSOR_THRESHOLD_BLUE_1) {
@@ -1346,6 +1096,10 @@ void display_IR_sensors_levels()
 	}
 	else
 	{
+		if(sensor_active[2])
+		{
+			sensor_changed[2] = 1;
+		}
 		sensor_active[2] = 0;
 	}
 
@@ -1377,8 +1131,418 @@ void display_IR_sensors_levels()
 	}
 	else
 	{
+		if(sensor_active[3])
+		{
+			sensor_changed[3] = 1;
+		}
 		sensor_active[3] = 0;
 	}
+}
+
+void indicate_context_setting(uint16_t leds, int blink, int delay)
+{
+	for(int i=0;i<blink;i++)
+	{
+		if(leds<0x100)
+		{
+			LED_R8_set_byte(leds);
+			Delay(delay);
+			LED_R8_all_OFF();
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_LEFT_4 || leds==SETTINGS_INDICATOR_ANIMATE_LEFT_8)
+		{
+			if(leds==SETTINGS_INDICATOR_ANIMATE_LEFT_8)
+			{
+				LED_R8_set_byte(0x80);
+				Delay(delay);
+				LED_R8_set_byte(0x40);
+				Delay(delay);
+				LED_R8_set_byte(0x20);
+				Delay(delay);
+				LED_R8_set_byte(0x10);
+				Delay(delay);
+			}
+
+			LED_R8_set_byte(0x08);
+			Delay(delay);
+			LED_R8_set_byte(0x04);
+			Delay(delay);
+			LED_R8_set_byte(0x02);
+			Delay(delay);
+			LED_R8_set_byte(0x01);
+			Delay(delay);
+			LED_R8_all_OFF();
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_RIGHT_4 || leds==SETTINGS_INDICATOR_ANIMATE_RIGHT_8)
+		{
+			if(leds==SETTINGS_INDICATOR_ANIMATE_RIGHT_8)
+			{
+				LED_R8_set_byte(0x01);
+				Delay(delay);
+				LED_R8_set_byte(0x02);
+				Delay(delay);
+				LED_R8_set_byte(0x04);
+				Delay(delay);
+				LED_R8_set_byte(0x08);
+				Delay(delay);
+			}
+
+			LED_R8_set_byte(0x10);
+			Delay(delay);
+			LED_R8_set_byte(0x20);
+			Delay(delay);
+			LED_R8_set_byte(0x40);
+			Delay(delay);
+			LED_R8_set_byte(0x80);
+			Delay(delay);
+			LED_R8_all_OFF();
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_IRS)
+		{
+			//LED_R8_set_byte(0x81);
+			//LED_O4_set_byte(0x09);
+			//Delay(delay);
+			//LED_R8_all_OFF();
+			//LED_O4_all_OFF();
+			//Delay(delay);
+			/*
+			LED_R8_set_byte(0x01);
+			LED_O4_set_byte(0x08);
+			Delay(delay);
+			LED_R8_set_byte(0x03);
+			Delay(delay);
+			LED_R8_set_byte(0x07);
+			LED_O4_set_byte(0x0c);
+			Delay(delay);
+			LED_R8_set_byte(0x0f);
+			Delay(delay);
+			LED_R8_set_byte(0x1f);
+			LED_O4_set_byte(0x0e);
+			Delay(delay);
+			LED_R8_set_byte(0x3f);
+			Delay(delay);
+			LED_R8_set_byte(0x7f);
+			LED_O4_set_byte(0x0f);
+			Delay(delay);
+			LED_R8_set_byte(0xff);
+			Delay(delay);
+			*/
+			LED_R8_0_ON;
+			LED_O4_3_ON;
+			Delay(delay);
+			LED_R8_1_ON;
+			Delay(delay);
+			LED_R8_2_ON;
+			LED_O4_2_ON;
+			Delay(delay);
+			LED_R8_3_ON;
+			Delay(delay);
+			LED_R8_4_ON;
+			LED_O4_1_ON;
+			Delay(delay);
+			LED_R8_5_ON;
+			Delay(delay);
+			LED_R8_6_ON;
+			LED_O4_0_ON;
+			Delay(delay);
+			LED_R8_7_ON;
+			Delay(delay);
+
+			LED_R8_7_OFF;
+			Delay(delay);
+			LED_R8_6_OFF;
+			LED_O4_0_OFF;
+			Delay(delay);
+			LED_R8_5_OFF;
+			Delay(delay);
+			LED_R8_4_OFF;
+			LED_O4_1_OFF;
+			Delay(delay);
+			LED_R8_3_OFF;
+			Delay(delay);
+			LED_R8_2_OFF;
+			LED_O4_2_OFF;
+			Delay(delay);
+			LED_R8_1_OFF;
+			Delay(delay);
+			LED_R8_0_OFF;
+			LED_O4_3_OFF;
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_3DS)
+		{
+			//LED_B5_set_byte(0x15);
+			LED_R8_set_byte(0xc3);
+			LED_O4_set_byte(0x06);
+			Delay(delay);
+			//LED_B5_all_OFF();
+			LED_R8_all_OFF();
+			LED_O4_all_OFF();
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_ALL_LEDS_OFF)
+		{
+			LED_R8_set_byte(0xff);
+			LED_O4_set_byte(0x0f);
+			LED_B5_set_byte(0x1f);
+			LED_W8_set_byte(0xff);
+			Delay(delay);
+			LED_R8_7_OFF;
+			LED_W8_0_OFF;
+			LED_B5_0_OFF;
+			Delay(delay);
+			LED_R8_6_OFF;
+			LED_W8_1_OFF;
+			LED_O4_0_OFF;
+			Delay(delay);
+			LED_R8_5_OFF;
+			LED_W8_2_OFF;
+			LED_B5_1_OFF;
+			Delay(delay);
+			LED_R8_4_OFF;
+			LED_W8_3_OFF;
+			LED_O4_1_OFF;
+			Delay(delay);
+			LED_R8_3_OFF;
+			LED_W8_4_OFF;
+			LED_B5_2_OFF;
+			Delay(delay);
+			LED_R8_2_OFF;
+			LED_W8_5_OFF;
+			LED_O4_2_OFF;
+			Delay(delay);
+			LED_R8_1_OFF;
+			LED_W8_6_OFF;
+			LED_B5_3_OFF;
+			Delay(delay);
+			LED_R8_0_OFF;
+			LED_W8_7_OFF;
+			LED_O4_3_OFF;
+			Delay(delay);
+			LED_B5_4_OFF;
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_ALL_LEDS_ON)
+		{
+			LEDs_all_OFF();
+			LED_R8_0_ON;
+			LED_W8_7_ON;
+			LED_O4_3_ON;
+			LED_B5_4_ON;
+			Delay(delay);
+			LED_R8_1_ON;
+			LED_W8_6_ON;
+			Delay(delay);
+			LED_R8_2_ON;
+			LED_W8_5_ON;
+			LED_O4_2_ON;
+			LED_B5_3_ON;
+			Delay(delay);
+			LED_R8_3_ON;
+			LED_W8_4_ON;
+			Delay(delay);
+			LED_R8_4_ON;
+			LED_W8_3_ON;
+			LED_O4_1_ON;
+			LED_B5_2_ON;
+			Delay(delay);
+			LED_R8_5_ON;
+			LED_W8_2_ON;
+			Delay(delay);
+			LED_R8_6_ON;
+			LED_W8_1_ON;
+			LED_O4_0_ON;
+			LED_B5_1_ON;
+			Delay(delay);
+			LED_R8_7_ON;
+			LED_W8_0_ON;
+			Delay(delay);
+			LED_B5_0_ON;
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_HOLD_COMBINED)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x95);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_SUST_CHORD
+			 || leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_HOLD_CHORD)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x15);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_SUST_SINGLE_NOTE
+			 || leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_HOLD_SINGLE_NOTE)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x01);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_SUST_OCTAVE_UP_DOWN
+			 || leds==SETTINGS_INDICATOR_MIDI_POLYPHONY+MIDI_POLYPHONY_HOLD_OCTAVE_UP_DOWN)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x81);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_FILL_8_LEFT)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x80);
+			Delay(delay);
+			LED_R8_set_byte(0xc0);
+			Delay(delay);
+			LED_R8_set_byte(0xe0);
+			Delay(delay);
+			LED_R8_set_byte(0xf0);
+			Delay(delay);
+			LED_R8_set_byte(0xf8);
+			Delay(delay);
+			LED_R8_set_byte(0xfc);
+			Delay(delay);
+			LED_R8_set_byte(0xfe);
+			Delay(delay);
+			LED_R8_set_byte(0xff);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_FILL_8_RIGHT)
+		{
+			LED_R8_all_OFF();
+			Delay(delay);
+			LED_R8_set_byte(0x01);
+			Delay(delay);
+			LED_R8_set_byte(0x03);
+			Delay(delay);
+			LED_R8_set_byte(0x07);
+			Delay(delay);
+			LED_R8_set_byte(0x0f);
+			Delay(delay);
+			LED_R8_set_byte(0x1f);
+			Delay(delay);
+			LED_R8_set_byte(0x3f);
+			Delay(delay);
+			LED_R8_set_byte(0x7f);
+			Delay(delay);
+			LED_R8_set_byte(0xff);
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_CLEAR_8_RIGHT)
+		{
+			LED_R8_set_byte(0xff);
+			Delay(delay);
+			LED_R8_set_byte(0xfe);
+			Delay(delay);
+			LED_R8_set_byte(0xfc);
+			Delay(delay);
+			LED_R8_set_byte(0xf8);
+			Delay(delay);
+			LED_R8_set_byte(0xf0);
+			Delay(delay);
+			LED_R8_set_byte(0xe0);
+			Delay(delay);
+			LED_R8_set_byte(0xc0);
+			Delay(delay);
+			LED_R8_set_byte(0x80);
+			Delay(delay);
+			LED_R8_all_OFF();
+			Delay(delay);
+		}
+		else if(leds==SETTINGS_INDICATOR_ANIMATE_CLEAR_8_LEFT)
+		{
+			LED_R8_set_byte(0xff);
+			Delay(delay);
+			LED_R8_set_byte(0x7f);
+			Delay(delay);
+			LED_R8_set_byte(0x3f);
+			Delay(delay);
+			LED_R8_set_byte(0x1f);
+			Delay(delay);
+			LED_R8_set_byte(0x0f);
+			Delay(delay);
+			LED_R8_set_byte(0x07);
+			Delay(delay);
+			LED_R8_set_byte(0x03);
+			Delay(delay);
+			LED_R8_set_byte(0x01);
+			Delay(delay);
+			LED_R8_all_OFF();
+			Delay(delay);
+		}
+	}
+}
+
+void indicate_error(uint16_t leds, int blink, int delay)
+{
+	for(int i=0;i<blink;i++)
+	{
+		LED_R8_set_byte(leds);
+		Delay(delay);
+		LED_R8_set_byte(leds>>8);
+		Delay(delay);
+	}
+	LED_R8_all_OFF();
+}
+
+void indicate_eq_bass_setting(int value, uint16_t setting)
+{
+	LED_R8_all_OFF();
+	if(setting==SETTINGS_INDICATOR_EQ_BASS || setting==SETTINGS_INDICATOR_EQ_TREBLE)
+	{
+		if(setting==SETTINGS_INDICATOR_EQ_BASS)
+		{
+			value = -value;
+		}
+
+		if(value==-9)
+		{
+			LED_R8_0_ON;
+			LED_R8_1_ON;
+		}
+		if(value==-6)
+		{
+			LED_R8_1_ON;
+			LED_R8_2_ON;
+		}
+		if(value==-3)
+		{
+			LED_R8_2_ON;
+			LED_R8_3_ON;
+		}
+		if(value==0)
+		{
+			LED_R8_3_ON;
+			LED_R8_4_ON;
+		}
+		if(value==3)
+		{
+			LED_R8_4_ON;
+			LED_R8_5_ON;
+		}
+		if(value==6)
+		{
+			LED_R8_5_ON;
+			LED_R8_6_ON;
+		}
+		if(value==9)
+		{
+			LED_R8_6_ON;
+			LED_R8_7_ON;
+		}
+	}
+}
+
+void LED_sequencer_indicate_position(int chord)
+{
+	LED_R8_set_byte(1<<(chord%8));
+	LED_O4_set_byte(1<<((chord/8)%4));
 }
 
 #endif

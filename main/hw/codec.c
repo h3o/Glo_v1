@@ -23,16 +23,44 @@
 #include <hw/ui.h>
 #include <string.h>
 
+const uint16_t sampling_rates[SAMPLING_RATES] = {SAMPLE_RATE_DEFAULT/*50780*/,44100,32000,24000,22050};
+const uint8_t sampling_rates_indication[SAMPLING_RATES] = {0xd0,0x09,0x06,0x0a,0x12};
+uint8_t sampling_rates_ptr = 0;
+uint16_t current_sampling_rate = 0;
+
+#define SUPPORTED_SAMPLING_RATES 7
+const uint16_t supported_sampling_rates[SUPPORTED_SAMPLING_RATES] = {50781,50780,48000,44100,32000,24000,22050};
+
 volatile uint32_t sampleCounter = 0;
 int add_beep = 0;
 int mclk_enabled;
 int mics_off = 0;
+uint8_t ADC_input_select = ADC_INPUT_DEFAULT; //mics by default
+uint8_t ADC_LR_enabled = ADC_LR_BOTH_ENABLED;
 
 int codec_analog_volume;// = CODEC_ANALOG_VOLUME_DEFAULT;
 int codec_digital_volume;// = CODEC_DIGITAL_VOLUME_DEFAULT;
 int codec_volume_user;// = CODEC_DIGITAL_VOLUME_DEFAULT;
 
+uint8_t codec_ADC_volumes[6];
+
+#define CODEC_ADC_VOLUME_MIC_L		0
+#define CODEC_ADC_VOLUME_MIC_R		1
+#define CODEC_ADC_VOLUME_LINE_L		2
+#define CODEC_ADC_VOLUME_LINE_R		3
+#define CODEC_ADC_VOLUME_MIXED_L	4
+#define CODEC_ADC_VOLUME_MIXED_R	5
+
+uint8_t codec_ADC_volume_CURRENT_ACTIVE_L;
+uint8_t codec_ADC_volume_CURRENT_ACTIVE_R;
+
+const int8_t AGC_levels[AGC_LEVELS] = {0, -5, -8, -10, -12, -14, -17, -20, -24};
+const uint8_t AGC_levels_indication[AGC_LEVELS] = {0x00,0x10,0x80,0x01,0x03,0x09,0x41,0x02,0x0a};
+//uint8_t AGC_levels_ptr;
+
 #define CODEC_PLL_44K
+
+#define ADC_HP_FILTER
 
 #define CODEC_EQ_COEFFS_DEFAULT
 
@@ -246,7 +274,7 @@ void swap_endian(int16_t *src, int16_t *dest, int n)
 	//printf("\n");
 }
 
-static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, int8_t AGC_max_gain, int8_t AGC_target_level)
+static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, int8_t AGC_max_gain, int8_t AGC_target_level, int8_t mic_bias)
 {
 	i2c_num = set_i2c_num;
 	//i2c_master_init();
@@ -346,6 +374,21 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
     //    0: If short-circuit protection is enabled, it limits the maximum current to the load.
     //ret = i2c_codec_two_byte_command(0x26, 0x16); //00010110 -> power down the output driver on short circuit
     ret = i2c_codec_two_byte_command(0x26, 0x14); //00010100 -> limit the maximum current on short circuit
+    if (ret != ESP_OK) { return ret; }
+
+    //Page 0/Register 40: High-Power Output Stage Control Register
+    //D7-D6 R/W 00 Output Common-Mode Voltage Control
+    //00: Output common-mode voltage = 1.35 V
+    //01: Output common-mode voltage = 1.5 V
+    //10: Output common-mode voltage = 1.65 V
+    //11: Output common-mode voltage = 1.8 V
+    //D5-D2 R/W 0000 Reserved. Write only zeros to these bits.
+    //D1-D0 R/W 00 Output Volume Control Soft-Stepping
+    //00: Output soft-stepping = one step per sample period
+    //01: Output soft-stepping = one step per two sample periods
+    //10: Output soft-stepping disabled
+    //11: Reserved. Do not write this sequence to these bits.
+    ret = i2c_codec_two_byte_command(0x28, 0x40); //01000000
     if (ret != ESP_OK) { return ret; }
 
     //Page 0/Register 41: DAC Output Switching Control Register
@@ -488,12 +531,16 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
 	//D7: 0: The left-ADC PGA is not muted
 	//D6-D0: 000 1100: Gain = 6 dB
 	#if defined(USE_LINE_IN) && !defined(USE_MICS)
-    ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00000000 -> 0dB
-    //ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00001100 -> 6dB
+    //ret = i2c_codec_two_byte_command(0x0f, 0x00); //00000000 -> 0dB
+    ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00001100 -> 6dB
     //ret = i2c_codec_two_byte_command(0x0f, 0x18); //00011000 -> 12dB
+    codec_ADC_volumes[CODEC_ADC_VOLUME_LINE_L] = 0x0c;
+    codec_ADC_volume_CURRENT_ACTIVE_L = CODEC_ADC_VOLUME_LINE_L;
 	#else
     ret = i2c_codec_two_byte_command(0x0f, 0x40); //01000000 -> 32dB
     //ret = i2c_codec_two_byte_command(0x0f, 0x60); //01100000 -> 48dB
+    codec_ADC_volumes[CODEC_ADC_VOLUME_MIC_L] = 0x40;
+    codec_ADC_volume_CURRENT_ACTIVE_L = CODEC_ADC_VOLUME_MIC_L;
 	#endif
     if (ret != ESP_OK) { return ret; }
 
@@ -501,12 +548,16 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
 	//D7: 0: The right ADC PGA is not muted
 	//D6-D0: 000 1100: Gain = 6 dB
 	#if defined(USE_LINE_IN) && !defined(USE_MICS)
-    ret = i2c_codec_two_byte_command(0x10, 0x0c); //00000000 -> 0dB
-    //ret = i2c_codec_two_byte_command(0x10, 0x0c); //00001100 -> 6dB
+    //ret = i2c_codec_two_byte_command(0x10, 0x00); //00000000 -> 0dB
+    ret = i2c_codec_two_byte_command(0x10, 0x0c); //00001100 -> 6dB
     //ret = i2c_codec_two_byte_command(0x10, 0x18); //00001100 -> 12dB
+    codec_ADC_volumes[CODEC_ADC_VOLUME_LINE_R] = 0x0c;
+    codec_ADC_volume_CURRENT_ACTIVE_R = CODEC_ADC_VOLUME_LINE_R;
 	#else
     ret = i2c_codec_two_byte_command(0x10, 0x40); //01000000 -> 32dB
     //ret = i2c_codec_two_byte_command(0x10, 0x60); //01100000 -> 48dB
+    codec_ADC_volumes[CODEC_ADC_VOLUME_MIC_R] = 0x40;
+    codec_ADC_volume_CURRENT_ACTIVE_R = CODEC_ADC_VOLUME_MIC_R;
 	#endif
     if (ret != ESP_OK) { return ret; }
 
@@ -583,14 +634,11 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
     ret = i2c_codec_two_byte_command(0x16, 0x94); //10010100
     if (ret != ESP_OK) { return ret; }
 
-	//set MIC bias (used to power the active analog microphones)
-
-    //Page 0/Register 25: MICBIAS Control Register
-	//D7-D6: 01: MICBIAS output is powered to 2 V
-    ret = i2c_codec_two_byte_command(0x19, 0x40); //01000000
+    //set MIC bias (used to power the active analog microphones)
+    ret = codec_set_mic_bias(mic_bias);
     if (ret != ESP_OK) { return ret; }
 
-	#endif
+    #endif
 
     //Page 0/Register 107: New Programmable ADC Digital Path and I2C Bus Condition Register
 	//D5-D4: 11: Left and right analog microphones are used
@@ -710,7 +758,8 @@ void codec_init()
 	printf("codec_init();\n");
 	//uint8_t sensor_data_h, sensor_data_l;
     //int AGC_enabled = CODEC_ENABLE_AGC;
-	int ret = i2c_codec_ctrl_init(I2C_MASTER_NUM, global_settings.AGC_ENABLED, global_settings.AGC_MAX_GAIN, global_settings.AGC_TARGET_LEVEL);//, &sensor_data_h, &sensor_data_l);
+	//int ret = i2c_codec_ctrl_init(I2C_MASTER_NUM, global_settings.AGC_ENABLED, global_settings.AGC_MAX_GAIN, global_settings.AGC_TARGET_LEVEL);//, &sensor_data_h, &sensor_data_l);
+	int ret = i2c_codec_ctrl_init(I2C_MASTER_NUM, persistent_settings.AGC_ENABLED_OR_PGA, persistent_settings.AGC_MAX_GAIN, persistent_settings.AGC_ENABLED_OR_PGA, persistent_settings.MIC_BIAS);
 
     if(ret == ESP_ERR_TIMEOUT) {
 		printf("ESP_ERR_TIMEOUT (i2c)\n");
@@ -740,9 +789,146 @@ void codec_reset()
     gpio_set_level(CODEC_RST_PIN, 0);  //reset the codec
 }
 
-int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
+void codec_silence(uint32_t length)
 {
-    int ret;
+	uint32_t sample32 = 0;
+
+	i2s_zero_dma_buffer(I2S_NUM);
+
+	for(uint32_t i=0;i<SAMPLE_RATE_DEFAULT*length/1000;i++)
+	{
+		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+	}
+}
+
+int codec_adjust_ADC_gain(int direction)
+{
+	int ret = -1;
+	#define AGC_MAX_GAIN_STEP 2 //use smaller step instead of global_settings.AGC_MAX_GAIN_STEP
+
+	if(persistent_settings.AGC_ENABLED_OR_PGA) //if AGC enabled, will set the AGC Max Gain, but do not store as persistent settings
+	{
+		printf("codec_adjust_ADC_gain(direction=%d) using AGC\n",direction);
+
+		if (direction == 1) //button #4
+		{
+			if (persistent_settings.AGC_MAX_GAIN<=global_settings.AGC_MAX_GAIN_LIMIT-AGC_MAX_GAIN_STEP)
+			{
+				persistent_settings.AGC_MAX_GAIN += AGC_MAX_GAIN_STEP; //increase AGC max gain
+				ret = codec_configure_AGC(persistent_settings.AGC_ENABLED_OR_PGA, persistent_settings.AGC_MAX_GAIN, persistent_settings.AGC_ENABLED_OR_PGA);
+				printf("codec_adjust_ADC_gain(): AGC_MAX_GAIN increased by %ddB, current value = %ddB\n", AGC_MAX_GAIN_STEP, persistent_settings.AGC_MAX_GAIN);
+			}
+		}
+		else if (direction == -1) //button #3
+		{
+			if (persistent_settings.AGC_MAX_GAIN>=AGC_MAX_GAIN_STEP)
+			{
+				persistent_settings.AGC_MAX_GAIN -= AGC_MAX_GAIN_STEP; //decrease AGC max gain
+				ret = codec_configure_AGC(persistent_settings.AGC_ENABLED_OR_PGA, persistent_settings.AGC_MAX_GAIN, persistent_settings.AGC_ENABLED_OR_PGA);
+				printf("codec_adjust_ADC_gain(): AGC_MAX_GAIN decreased by %ddB, current value = %ddB\n", AGC_MAX_GAIN_STEP, persistent_settings.AGC_MAX_GAIN);
+			}
+		}
+		return ret;
+	}
+	else //if AGC disabled, will adjust PGA Gain directly
+	{
+		printf("codec_adjust_ADC_gain(direction=%d) using PGA\n",direction);
+
+		int input = ADC_input_select;
+
+		int new_volume = codec_ADC_volumes[codec_ADC_volume_CURRENT_ACTIVE_L];
+		printf("codec_adjust_ADC_gain(): input = %d, L0 = %u",codec_ADC_volume_CURRENT_ACTIVE_L,new_volume);
+
+		new_volume+=ADC_GAIN_STEP*direction;
+		if(new_volume >= ADC_GAIN_MAX)
+		{
+			new_volume = ADC_GAIN_MAX;
+		}
+		if(new_volume <= ADC_GAIN_MIN)
+		{
+			new_volume = ADC_GAIN_MIN;
+		}
+		printf(" => L1 = %u, ",new_volume);
+		codec_ADC_volumes[codec_ADC_volume_CURRENT_ACTIVE_L] = new_volume;
+
+		//Page 0/Register 15: Left-ADC PGA Gain Control Register
+		//D7: 0: The left-ADC PGA is not muted
+		//D6-D0: 000 1100: Gain = 6 dB
+		ret = i2c_codec_two_byte_command(0x0f, new_volume);
+		if (ret != ESP_OK) { return ret; }
+
+		new_volume = codec_ADC_volumes[codec_ADC_volume_CURRENT_ACTIVE_R];
+		printf("input = %d, R0 = %u",codec_ADC_volume_CURRENT_ACTIVE_R,new_volume);
+
+		new_volume+=ADC_GAIN_STEP*direction;
+		if(new_volume >= ADC_GAIN_MAX)
+		{
+			new_volume = ADC_GAIN_MAX;
+		}
+		if(new_volume <= ADC_GAIN_MIN)
+		{
+			new_volume = ADC_GAIN_MIN;
+		}
+		printf(" => R1 = %u, ",new_volume);
+		codec_ADC_volumes[codec_ADC_volume_CURRENT_ACTIVE_R] = new_volume;
+
+		//Page 0/Register 16: Right-ADC PGA Gain Control Register
+		//D7: 0: The right ADC PGA is not muted
+		//D6-D0: 000 1100: Gain = 6 dB
+		ret = i2c_codec_two_byte_command(0x10, new_volume);
+		//if (ret != ESP_OK) { return ret; }
+		return ret;
+	}
+
+	return ret;
+}
+
+int codec_set_mic_bias(int mic_bias) //set microphones power voltage level
+{
+	//Page 0/Register 25: MICBIAS Control Register
+	//D7-D6: 01: MICBIAS output is powered to 2 V
+	//D7-D6: 10: MICBIAS output is powered to 2.5 V
+	//D7-D6: 11: MICBIAS output is connected to AVDD
+
+	printf("codec_set_mic_bias(): setting to level %d = ", mic_bias);
+
+	int ret = -1;
+
+	if(mic_bias==MIC_BIAS_AVDD)
+	{
+		printf("AVDD\n");
+		ret = i2c_codec_two_byte_command(0x19, 0xc0); //11000000 -> AVDD
+	}
+	else if(mic_bias==MIC_BIAS_2_5V)
+	{
+		printf("2.5V\n");
+		ret = i2c_codec_two_byte_command(0x19, 0x80); //10000000 -> 2.5V
+	}
+	else if(mic_bias==MIC_BIAS_2V)
+	{
+		printf("2V\n");
+		ret = i2c_codec_two_byte_command(0x19, 0x40); //01000000 -> 2V
+	}
+
+	return ret;
+}
+
+int codec_select_input(uint8_t input) //0 = off, 1 = mic, 2 = line-in
+{
+    int ret = 0;
+
+    if(input==ADC_INPUT_L_LINE || input==ADC_INPUT_L_MIC_L_LINE)	//right line mute and possibly analysed for sync
+    {
+    	ADC_LR_enabled = ADC_LR_MUTE_R;
+    }
+    else if(input==ADC_INPUT_R_LINE || input==ADC_INPUT_R_MIC_R_LINE)	//left line mute and possibly analysed for sync
+    {
+        ADC_LR_enabled = ADC_LR_MUTE_L;
+    }
+    else
+    {
+    	ADC_LR_enabled = ADC_LR_BOTH_ENABLED;
+    }
 
     if(input==ADC_INPUT_OFF)
     {
@@ -779,39 +965,56 @@ int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
 		return ESP_OK;
     }
 
-	//ADC setup -----------------------------------------------------------------------------------
+    //ADC setup -----------------------------------------------------------------------------------
 
     //Page 0/Register 15: Left-ADC PGA Gain Control Register
 	//D7: 0: The left-ADC PGA is not muted
 	//D6-D0: 000 1100: Gain = 6 dB
-	if(input==ADC_INPUT_LINE_IN) {
-		ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00000000 -> 0dB
-		//ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00001100 -> 6dB
+	if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_R_MIC_L_LINE || input==ADC_INPUT_L_LINE) {
+		//ret = i2c_codec_two_byte_command(0x0f, 0x00); //00000000 -> 0dB
+		ret = i2c_codec_two_byte_command(0x0f, 0x0c); //00001100 -> 6dB
 		//ret = i2c_codec_two_byte_command(0x0f, 0x18); //00011000 -> 12dB
-	} else {
+		codec_ADC_volumes[CODEC_ADC_VOLUME_LINE_L] = 0x0c;
+	    codec_ADC_volume_CURRENT_ACTIVE_L = CODEC_ADC_VOLUME_LINE_L;
+	} else if (input==ADC_INPUT_MIC || input==ADC_INPUT_L_MIC_R_LINE) {
 		ret = i2c_codec_two_byte_command(0x0f, 0x40); //01000000 -> 32dB
 		//ret = i2c_codec_two_byte_command(0x0f, 0x60); //01100000 -> 48dB
+		codec_ADC_volumes[CODEC_ADC_VOLUME_MIC_L] = 0x40;
+	    codec_ADC_volume_CURRENT_ACTIVE_L = CODEC_ADC_VOLUME_MIC_L;
+	} else if (input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_L_MIC_L_LINE) {
+		ret = i2c_codec_two_byte_command(0x0f, 0x20); //00100000 -> 16dB
+		codec_ADC_volumes[CODEC_ADC_VOLUME_MIXED_L] = 0x20;
+	    codec_ADC_volume_CURRENT_ACTIVE_L = CODEC_ADC_VOLUME_MIXED_L;
 	}
     if (ret != ESP_OK) { return ret; }
 
 	//Page 0/Register 16: Right-ADC PGA Gain Control Register
 	//D7: 0: The right ADC PGA is not muted
 	//D6-D0: 000 1100: Gain = 6 dB
-    if(input==ADC_INPUT_LINE_IN) {
-    	ret = i2c_codec_two_byte_command(0x10, 0x0c); //00000000 -> 0dB
-    	//ret = i2c_codec_two_byte_command(0x10, 0x0c); //00001100 -> 6dB
+	if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_L_MIC_R_LINE || input==ADC_INPUT_R_LINE) {
+    	//ret = i2c_codec_two_byte_command(0x10, 0x00); //00000000 -> 0dB
+    	ret = i2c_codec_two_byte_command(0x10, 0x0c); //00001100 -> 6dB
     	//ret = i2c_codec_two_byte_command(0x10, 0x18); //00001100 -> 12dB
-	} else {
+		codec_ADC_volumes[CODEC_ADC_VOLUME_LINE_R] = 0x0c;
+	    codec_ADC_volume_CURRENT_ACTIVE_R = CODEC_ADC_VOLUME_LINE_R;
+	} else if (input==ADC_INPUT_MIC || input==ADC_INPUT_R_MIC_L_LINE) {
 		ret = i2c_codec_two_byte_command(0x10, 0x40); //01000000 -> 32dB
 		//ret = i2c_codec_two_byte_command(0x10, 0x60); //01100000 -> 48dB
+		codec_ADC_volumes[CODEC_ADC_VOLUME_MIC_R] = 0x40;
+	    codec_ADC_volume_CURRENT_ACTIVE_R = CODEC_ADC_VOLUME_MIC_R;
+	} else if (input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_R_MIC_R_LINE) {
+		ret = i2c_codec_two_byte_command(0x10, 0x20); //00100000 -> 16dB
+		codec_ADC_volumes[CODEC_ADC_VOLUME_MIXED_R] = 0x20;
+	    codec_ADC_volume_CURRENT_ACTIVE_R = CODEC_ADC_VOLUME_MIXED_R;
 	}
     if (ret != ESP_OK) { return ret; }
 
 	//Line-in setup -------------------------------------------------------------------------------
 
-    if(input==ADC_INPUT_LINE_IN) {
-
-    	//connect MIC2/LINE2 lines to ADC and set gain
+	//connect MIC2/LINE2 lines to ADC and set gain
+    if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_R_MIC_L_LINE || input==ADC_INPUT_L_LINE || input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_L_MIC_L_LINE) {
+    //line inputs are actually swapped in hardware
+    //if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_L_MIC_R_LINE || input==ADC_INPUT_R_LINE || input==ADC_INPUT_BOTH_MIXED) {
 
     	//Page 0/Register 17: MIC2L/R to Left-ADC Control Register
 		//MIC2L Input Level Control for Left-ADC PGA Mix
@@ -824,6 +1027,10 @@ int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
 		//ret = i2c_codec_two_byte_command(0x11, 0x4f); //01001111 -> -6dB
 		ret = i2c_codec_two_byte_command(0x11, 0x8f); //10001111 -> -12dB
 		if (ret != ESP_OK) { return ret; }
+    }
+    if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_L_MIC_R_LINE || input==ADC_INPUT_R_LINE || input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_R_MIC_R_LINE) {
+	//line inputs are actually swapped in hardware
+    //if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_R_MIC_L_LINE || input==ADC_INPUT_L_LINE || input==ADC_INPUT_BOTH_MIXED) {
 
 		//Page 0/Register 18: MIC2/LINE2 to Right-ADC Control Register
 		//MIC2L/LINE2L Input Level Control for Right -DC PGA Mix
@@ -835,8 +1042,10 @@ int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
 		//ret = i2c_codec_two_byte_command(0x12, 0xf4); //11110100 -> -6dB
 		ret = i2c_codec_two_byte_command(0x12, 0xf8); //11111000 -> -12dB
 		if (ret != ESP_OK) { return ret; }
+    }
 
-		//power up ADC but do not connect MIC1/LINE1 lines
+	//power up ADC but do not connect MIC1/LINE1 lines
+	if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_R_MIC_L_LINE || input==ADC_INPUT_L_LINE || input==ADC_INPUT_R_LINE || input==ADC_INPUT_R_MIC_R_LINE) {
 
 		//Page 0/Register 19: MIC1LP/LINE1LP to Left-ADC Control Register
 		//D7: 1: MIC1LP/LINE1LP and MIC1LM/LINE1LM are configured in fully differential mode
@@ -845,6 +1054,8 @@ int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
 		//D1-D0: 00: Left-ADC PGA soft-stepping at once per sample period
 		ret = i2c_codec_two_byte_command(0x13, 0xfc); //11111100
 		if (ret != ESP_OK) { return ret; }
+	}
+	if(input==ADC_INPUT_LINE_IN || input==ADC_INPUT_L_MIC_R_LINE || input==ADC_INPUT_R_LINE || input==ADC_INPUT_L_LINE || input==ADC_INPUT_L_MIC_L_LINE) {
 
 		//Page 0/Register 22: MIC1RP/LINE1RP to Right-ADC Control Register
 		//D7: 1: MIC1RP/LINE1RP and MIC1RM/LINE1RM are configured in fully differential mode
@@ -853,43 +1064,127 @@ int codec_select_input(int input) //0 = off, 1 = mic, 2 = line-in
 		//D1-D0: 00: Right-ADC PGA soft-stepping at once per sample period
 		ret = i2c_codec_two_byte_command(0x16, 0xfc); //11111100
 		if (ret != ESP_OK) { return ret; }
+	}
 
-	} else {
-
-    	//disconnect MIC2/LINE2 lines
+	//disconnect MIC2/LINE2 lines
+	if(input==ADC_INPUT_MIC || input==ADC_INPUT_L_MIC_R_LINE /*|| input==ADC_INPUT_R_LINE*/) {
 
 		//Page 0/Register 17: MIC2L/R to Left-ADC Control Register
 		//D7-D4: 1111: MIC2L is not connected to the left-ADC PGA.
 		//D3-D0: 1111: MIC2R/LINE2R is not connected to the left-ADC PGA.
 		ret = i2c_codec_two_byte_command(0x11, 0xff); //11111111
 		if (ret != ESP_OK) { return ret; }
+	}
+	if(input==ADC_INPUT_MIC || input==ADC_INPUT_R_MIC_L_LINE /*|| input==ADC_INPUT_L_LINE*/) {
 
 		//Page 0/Register 18: MIC2/LINE2 to Right-ADC Control Register
 		//D7-D4: 1111: MIC2L/LINE2L is not connected to the right-ADC PGA.
 		//D3-D0: 1111: MIC2R/LINE2R is not connected to right-ADC PGA.
 		ret = i2c_codec_two_byte_command(0x12, 0xff); //11111111
 		if (ret != ESP_OK) { return ret; }
+	}
 
-    	//connect MIC1/LINE1 lines to ADC and set gain
+	//connect MIC1/LINE1 lines to ADC and set gain
+	if(input==ADC_INPUT_MIC || input==ADC_INPUT_L_MIC_R_LINE || input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_L_MIC_L_LINE) {
 
 		//Page 0/Register 19: MIC1LP/LINE1LP to Left-ADC Control Register
 		//D7: 1: MIC1LP/LINE1LP and MIC1LM/LINE1LM are configured in fully differential mode
 		//D6-D3: 0010: Input level control gain = -3 dB
 		//D2: 1: Left-ADC channel is powered up
 		//D1-D0: 00: Left-ADC PGA soft-stepping at once per sample period
-		ret = i2c_codec_two_byte_command(0x13, 0x94); //10010100
+		//ret = i2c_codec_two_byte_command(0x13, 0x94); //10010100 -> -3dB input level
+		ret = i2c_codec_two_byte_command(0x13, 0x84); //10000100 -> 0dB input level
 		if (ret != ESP_OK) { return ret; }
+	}
+	if(input==ADC_INPUT_MIC || input==ADC_INPUT_R_MIC_L_LINE || input==ADC_INPUT_BOTH_MIXED || input==ADC_INPUT_R_MIC_R_LINE) {
 
 		//Page 0/Register 22: MIC1RP/LINE1RP to Right-ADC Control Register
 		//D7: 1: MIC1RP/LINE1RP and MIC1RM/LINE1RM are configured in fully differential mode
 		//D6-D3: 0010: Input level control gain = -3 dB
 		//D2: 1: Right-ADC channel is powered up
 		//D1-D0: 00: Right-ADC PGA soft-stepping at once per sample period
-		ret = i2c_codec_two_byte_command(0x16, 0x94); //10010100
+		//ret = i2c_codec_two_byte_command(0x16, 0x94); //10010100 -> -3dB input level
+		ret = i2c_codec_two_byte_command(0x16, 0x84); //10000100 -> 0dB input level
 		if (ret != ESP_OK) { return ret; }
 	}
 
     return ESP_OK;
+}
+
+int previous_ADC_mute_val = -1;
+
+int codec_mute_inputs(int status) //0 = mute, 1 = unmute
+{
+	printf("codec_mute_inputs(): status = %d\n", status);
+
+	if(status) //unmute
+	{
+		if(previous_ADC_mute_val==-1)
+		{
+			return -1;
+		}
+		printf("codec_mute_inputs(): un-mute\n");
+		ADC_LR_enabled = previous_ADC_mute_val;
+		previous_ADC_mute_val=-1;
+	}
+	else //mute
+	{
+		if(previous_ADC_mute_val!=-1)
+		{
+			return -2;
+		}
+		printf("codec_mute_inputs(): mute\n");
+		previous_ADC_mute_val = ADC_LR_enabled;
+		ADC_LR_enabled = ADC_LR_MUTE_BOTH;
+	}
+	return ADC_LR_enabled;
+
+	/*
+	//this will not work at all if AGC enabled, as then PGA cannot be controlled directly
+
+	//Page 0/Register 15: Left-ADC PGA Gain Control Register
+	//D7: 0: The left-ADC PGA is not muted
+
+	uint8_t reg_status = i2c_codec_register_read(0x0f);
+	printf("codec_mute_inputs(): reg_status(0x0f) = %x\n", reg_status);
+	if(status) //unmute
+	{
+		reg_status &= 0x7f;
+	}
+	else //mute
+	{
+		reg_status |= 0x80;
+	}
+
+	printf("codec_mute_inputs(): new reg_status(0x0f) = %x\n", reg_status);
+	int ret = i2c_codec_two_byte_command(0x0f, reg_status);
+    if (ret != ESP_OK) {
+    	printf("codec_mute_inputs(): error setting new reg_status(0x0f) to %x: %d\n", reg_status, ret);
+    	return ret;
+    }
+
+    //Page 0/Register 16: Right-ADC PGA Gain Control Register
+	//D7: 0: The right ADC PGA is not muted
+
+    reg_status = i2c_codec_register_read(0x10);
+	printf("codec_mute_inputs(): reg_status(0x10) = %x\n", reg_status);
+	if(status) //unmute
+	{
+		reg_status &= 0x7f;
+	}
+	else //mute
+	{
+		reg_status |= 0x80;
+	}
+
+	printf("codec_mute_inputs(): new reg_status(0x10) = %x\n", reg_status);
+	ret = i2c_codec_two_byte_command(0x10, reg_status);
+    if (ret != ESP_OK) {
+    	printf("codec_mute_inputs(): error setting new reg_status(0x10) to %x: %d\n", reg_status, ret);
+    	return ret;
+    }
+    return ret;
+    */
 }
 
 void codec_set_analog_volume()
@@ -1000,7 +1295,18 @@ int codec_set_eq()
 	ret = i2c_codec_two_byte_command(0x00, 0x00);
 	if (ret != ESP_OK) { return ret; }
 
-    //Page 0/Register 12: Audio Codec Digital Filter Control Register
+	#ifdef ADC_HP_FILTER
+	//Page 0/Register 12: Audio Codec Digital Filter Control Register
+    //D7-D6: Left-ADC High-Pass Filter Control -> 01: Left-ADC high-pass filter -3dB frequency = 0.0045 x ADC fS
+    //D5-D4: Right-ADC High-Pass Filter Control -> 01: Right-ADC high-pass filter -3dB frequency = 0.0045 x ADC fS
+    //D3: Left-DAC Digital Effects Filter Control -> 1: Left-DAC digital effects filter enabled
+    //D2: Left-DAC De-Emphasis Filter Control -> 0: Left-DAC de-emphasis filter disabled (bypassed)
+    //D1: Right-DAC Digital Effects Filter Control -> 1: Right-DAC digital effects filter enabled
+    //D0: Right-DAC De-Emphasis Filter Control -> 0: Right-DAC de-emphasis filter disabled (bypassed)
+    ret = i2c_codec_two_byte_command(0x0c, 0x5a); //01011010
+    if (ret != ESP_OK) { return ret; }
+	#else
+	//Page 0/Register 12: Audio Codec Digital Filter Control Register
     //D7-D6: Left-ADC High-Pass Filter Control -> 00: Left-ADC high-pass filter disabled
     //D5-D4: Right-ADC High-Pass Filter Control -> 00: Right-ADC high-pass filter disabled
     //D3: Left-DAC Digital Effects Filter Control -> 1: Left-DAC digital effects filter enabled
@@ -1009,6 +1315,7 @@ int codec_set_eq()
     //D0: Right-DAC De-Emphasis Filter Control -> 0: Right-DAC de-emphasis filter disabled (bypassed)
     ret = i2c_codec_two_byte_command(0x0c, 0x0a); //00001010
     if (ret != ESP_OK) { return ret; }
+    #endif
 
     return ESP_OK;
 }
@@ -1063,7 +1370,7 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 		ret = i2c_codec_two_byte_command(0x1d, 0xf6); //the same for Register 29: Right-AGC Control Register A
 		if (ret != ESP_OK) { return ret; }
 	#else
-		printf("AGC Target Level set to %d\n", target_level);
+		printf("codec_configure_AGC(): AGC Target Level set to %d\n", target_level);
 
 		//#if CODEC_AGC_LEVEL == 5
 		if(target_level==-5) {
@@ -1088,10 +1395,10 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 			ret = i2c_codec_two_byte_command(0x1a, 0xd3); //11010011 - enabled,-17dB,8ms,500ms
 			ret = i2c_codec_two_byte_command(0x1d, 0xd3); //the same for Register 29: Right-AGC Control Register A
 		} else if(target_level==-20) {
-			ret = i2c_codec_two_byte_command(0x1a, 0xe3); //11100011 - enabled,-17dB,8ms,500ms
+			ret = i2c_codec_two_byte_command(0x1a, 0xe3); //11100011 - enabled,-20dB,8ms,500ms
 			ret = i2c_codec_two_byte_command(0x1d, 0xe3); //the same for Register 29: Right-AGC Control Register A
 		} else if(target_level==-24) {
-			ret = i2c_codec_two_byte_command(0x1a, 0xf3); //11110011 - enabled,-17dB,8ms,500ms
+			ret = i2c_codec_two_byte_command(0x1a, 0xf3); //11110011 - enabled,-24dB,8ms,500ms
 			ret = i2c_codec_two_byte_command(0x1d, 0xf3); //the same for Register 29: Right-AGC Control Register A
 		//#endif
 		}
@@ -1125,9 +1432,10 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 	//AGC_max_gain_u = 48;
 	//AGC_max_gain_u = 56;
 
-	printf("AGC Max Gain set to %u\n", AGC_max_gain_u);
+	printf("codec_configure_AGC(): AGC Max Gain set to %u\n", AGC_max_gain_u);
 
-	ret = i2c_codec_two_byte_command(0x1b, AGC_max_gain_u<<2); //resolution is 0.5dB, the LSB is reserved (0)
+	//resolution is 0.5dB, the LSB is reserved (0)
+	ret = i2c_codec_two_byte_command(0x1b, AGC_max_gain_u<<2); //Register 27: Left-AGC Control Register B
 	if (ret != ESP_OK) { return ret; }
 	ret = i2c_codec_two_byte_command(0x1e, AGC_max_gain_u<<2); //the same for Register 30: Right-AGC Control Register B
 	if (ret != ESP_OK) { return ret; }
@@ -1183,6 +1491,7 @@ void set_sampling_rate(int new_rate)
     else
     {
     	printf("set_sampling_rate(%d): new sampling rate set\n", new_rate);
+    	current_sampling_rate = new_rate;
     }
 }
 
@@ -1209,4 +1518,18 @@ void beep(int freq_div)
 	add_beep = freq_div;
 	Delay(100);
 	add_beep = 0;
+}
+
+int is_valid_sampling_rate(uint16_t rate)
+{
+	for(int i=0;i<SUPPORTED_SAMPLING_RATES;i++)
+	{
+		if(rate == supported_sampling_rates[i])
+		{
+			printf("is_valid_sampling_rate(): rate %d is supported\n", rate);
+			return 1;
+		}
+	}
+	printf("is_valid_sampling_rate(): rate %d is NOT supported\n", rate);
+	return 0;
 }

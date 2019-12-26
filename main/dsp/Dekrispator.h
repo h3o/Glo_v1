@@ -23,8 +23,8 @@
 #include <stdint.h> //for uint16_t type
 
 //#define SEND_MIDI_NOTES
-#define USE_LOW_SAMPLE_RATE
-//#define USE_FAUX_LOW_SAMPLE_RATE
+//#define USE_LOW_SAMPLE_RATE
+#define USE_FAUX_LOW_SAMPLE_RATE
 //#define USE_LARGER_BUFFERS
 
 #ifdef USE_LOW_SAMPLE_RATE

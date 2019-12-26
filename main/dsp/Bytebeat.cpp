@@ -21,41 +21,35 @@
 //#include <hw/signals.h>
 #include <hw/init.h>
 #include <hw/gpio.h>
+#include <hw/sdcard.h>
+#include <hw/leds.h>
 #include <string.h>
 
-int bytebeat_song_ptr;
-int bytebeat_song;
 #define BYTEBEAT_SONGS 8
-//#define BYTEBEAT_MCLK
+uint8_t bytebeat_song;
+int bytebeat_song_ptr;
+uint8_t bytebeat_speed_div = 0;
 
-int bytebeat_speed = 2;
-int bytebeat_speed_div = 0;
+uint8_t bytebeat_speed = 2;
 #define BYTEBEAT_SPEED_MAX 1
 #define BYTEBEAT_SPEED_MIN 128
 
-unsigned char s[4];
-float mix1, mix2;
-
-//int t[4];
-
-//int tt;
-
 #define STEREO_MIXING_STEPS 4
-float stereo_mixing[STEREO_MIXING_STEPS] = {0.5f,0.4f,0.2f,0}; //50, 60, 80 and 100% mixing ratio
-int stereo_mixing_step = 1; //default mixing 60:40
-int bytebeat_echo_on = 1;
-int bytebeat_echo_cycle = 4;
-
-int tt[4];
-
-#define BYTEBEAT_MIXING_VOLUME 2.5f
-
-uint16_t sample1, sample2;
-
-uint32_t bb_sample;
+uint8_t stereo_mixing_step = 1; //default mixing 60:40
+#ifdef BOARD_WHALE
+uint8_t bytebeat_echo_on = 1;
+#endif
 
 void channel_bytebeat()
 {
+	//#define BYTEBEAT_MCLK
+
+	#ifdef BOARD_WHALE
+	int bytebeat_echo_cycle = 4;
+	#endif
+
+	#define BYTEBEAT_MIXING_VOLUME 2.5f
+
 	#ifdef BYTEBEAT_MCLK
 	start_MCLK();
 	#endif
@@ -71,38 +65,10 @@ void channel_bytebeat()
     ECHO_MIXING_GAIN_DIV = 4; //e.g. if MUL=2 and DIV=3, it means 2/3 of signal is mixed in
     */
 
-	/*
-    unsigned char s[4];
-	float mix1, mix2;
-
-	int t[4];
-	for(int tt=0;;tt++)
-	{
-		t[0] = tt/8;
-		t[1] = t[0]/2;
-		t[2] = t[1]/2;
-		t[3] = t[2]/2;
-
-		s[0] = t[0]*((t[0]>>12|t[0]>>8)&63&t[0]>>4);
-		s[1] = t[1]*((t[1]>>12|t[1]>>8)&63&t[1]>>4);
-		s[2] = t[2]*((t[2]>>12|t[2]>>8)&63&t[2]>>4);
-		s[3] = t[3]*((t[3]>>12|t[3]>>8)&63&t[3]>>4);
-
-		//mix1 = (float)bytebeat_echo(s1);
-		//mix2 = (float)bytebeat_echo(s2);
-		mix1 = (float)(s[0]+s[2]);
-		mix2 = (float)(s[1]+s[3]);
-
-		s[0] = (int16_t)(mix1*4.5f+mix2*1.5f);
-		s[1] = (int16_t)(mix2*4.5f+mix1*1.5f);
-
-		sample32 = s[0]|(s[1]<<16);
-
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
-	}
-	*/
 	bytebeat_init();
-    RGB_LED_B_ON;
+	#ifdef BOARD_WHALE
+	RGB_LED_B_ON;
+	#endif
 
 	sample32 = 0;
 	for(int i=0;i<I2S_AUDIOFREQ/2;i++)
@@ -111,29 +77,57 @@ void channel_bytebeat()
 	}
 
 	channel_running = 1;
-    volume_ramp = 1;
+    //volume_ramp = 1;
+	//instead of volume ramp, set the codec volume instantly to un-mute the codec
+	codec_digital_volume=codec_volume_user;
+	codec_set_digital_volume();
+	noise_volume_max = 1.0f;
 
 	while(!event_next_channel)
 	{
 		sample32 = bytebeat_next_sample();
 		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		sd_write_sample(&sample32);
 
-		if(short_press_volume_plus)
+		ui_command = 0;
+
+		#define BYTEBEAT_UI_CMD_NEXT_SONG		1
+		#define BYTEBEAT_UI_CMD_STEREO_PANNING	2
+		#define BYTEBEAT_UI_CMD_SPEED_INCREASE	3
+		#define BYTEBEAT_UI_CMD_SPEED_DECREASE	4
+
+		//map UI commands
+		#ifdef BOARD_WHALE
+		if(short_press_volume_plus) { ui_command = BYTEBEAT_UI_CMD_NEXT_SONG; short_press_volume_plus = 0; }
+		if(short_press_volume_minus) { ui_command = BYTEBEAT_UI_CMD_STEREO_PANNING; short_press_volume_minus = 0; }
+		if(short_press_sequence==2) { ui_command = BYTEBEAT_UI_CMD_SPEED_INCREASE; short_press_sequence = 0; }
+		if(short_press_sequence==-2) { ui_command = BYTEBEAT_UI_CMD_SPEED_DECREASE; short_press_sequence = 0; }
+		#endif
+
+		#ifdef BOARD_GECHO
+		if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = BYTEBEAT_UI_CMD_NEXT_SONG; btn_event_ext = 0; }
+		if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = BYTEBEAT_UI_CMD_STEREO_PANNING; btn_event_ext = 0; }
+		if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1) { ui_command = BYTEBEAT_UI_CMD_SPEED_DECREASE; btn_event_ext = 0; }
+		if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2) { ui_command = BYTEBEAT_UI_CMD_SPEED_INCREASE; btn_event_ext = 0; }
+		#endif
+
+		if(ui_command==BYTEBEAT_UI_CMD_NEXT_SONG)
 		{
-			short_press_volume_plus = 0;
 			bytebeat_next_song();
 		}
-		if(short_press_volume_minus)
+		if(ui_command==BYTEBEAT_UI_CMD_STEREO_PANNING)
 		{
-			short_press_volume_minus = 0;
 			bytebeat_stereo_paning();
+			#ifdef BOARD_WHALE
 			bytebeat_echo_on = (bytebeat_echo_cycle%(2*STEREO_MIXING_STEPS)) / STEREO_MIXING_STEPS;
 			bytebeat_echo_cycle++;
 			printf("channel_bytebeat(): Pannig step, echo = %d (ec=%d), paning step = %d\n", bytebeat_echo_on, bytebeat_echo_cycle, stereo_mixing_step);
+			#else
+			printf("channel_bytebeat(): Pannig step = %d\n", stereo_mixing_step);
+			#endif
 		}
-		if(short_press_sequence==2)
+		if(ui_command==BYTEBEAT_UI_CMD_SPEED_INCREASE)
 		{
-			short_press_sequence = 0;
 			if(bytebeat_speed>BYTEBEAT_SPEED_MAX)
 			{
 				if(bytebeat_speed>=16)
@@ -148,9 +142,8 @@ void channel_bytebeat()
 			}
 			printf("channel_bytebeat(): Speed up => %d\n", bytebeat_speed);
 		}
-		if(short_press_sequence==-2)
+		if(ui_command==BYTEBEAT_UI_CMD_SPEED_DECREASE)
 		{
-			short_press_sequence = 0;
 			if(bytebeat_speed<BYTEBEAT_SPEED_MIN)
 			{
 				if(bytebeat_speed>=8)
@@ -183,52 +176,59 @@ void bytebeat_next_song()
 	{
 		bytebeat_song = 0;
 	}
+	LED_R8_set_byte(1<<bytebeat_song);
 }
 
 void bytebeat_stereo_paning()
 {
+	uint8_t stereo_mixing_step_indication[STEREO_MIXING_STEPS] = {0x18,0x24,0x42,0x81};
+
 	stereo_mixing_step++;
 	if(stereo_mixing_step==STEREO_MIXING_STEPS)
 	{
 		stereo_mixing_step = 0;
 	}
+	LED_R8_set_byte(stereo_mixing_step_indication[stereo_mixing_step]);
 }
 
 int16_t bytebeat_echo(int16_t sample)
 {
-	//wrap the echo loop
-	echo_buffer_ptr0++;
-	if (echo_buffer_ptr0 >= echo_dynamic_loop_length)
+	if(echo_dynamic_loop_length)
 	{
-		echo_buffer_ptr0 = 0;
+		//wrap the echo loop
+		echo_buffer_ptr0++;
+		if (echo_buffer_ptr0 >= echo_dynamic_loop_length)
+		{
+			echo_buffer_ptr0 = 0;
+		}
+
+		echo_buffer_ptr = echo_buffer_ptr0 + 1;
+		if (echo_buffer_ptr >= echo_dynamic_loop_length)
+		{
+			echo_buffer_ptr = 0;
+		}
+
+		//add echo from the loop
+		echo_mix_f = float(sample) + float(echo_buffer[echo_buffer_ptr]) * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
+
+		if (echo_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER)
+		{
+			echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER;
+		}
+
+		if (echo_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER)
+		{
+			echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER;
+		}
+
+		sample = (int16_t)echo_mix_f;
+
+		//store result to echo, the amount defined by a fragment
+		//echo_mix_f = ((float)sample_i16 * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV);
+		//echo_mix_f *= ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
+		//echo_buffer[echo_buffer_ptr0] = (int16_t)echo_mix_f;
+		echo_buffer[echo_buffer_ptr0] = sample;
 	}
-
-	echo_buffer_ptr = echo_buffer_ptr0 + 1;
-	if (echo_buffer_ptr >= echo_dynamic_loop_length)
-	{
-		echo_buffer_ptr = 0;
-	}
-
-	//add echo from the loop
-	echo_mix_f = float(sample) + float(echo_buffer[echo_buffer_ptr]) * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
-
-	if (echo_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER)
-	{
-		echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER;
-	}
-
-	if (echo_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER)
-	{
-		echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER;
-	}
-
-	sample = (int16_t)echo_mix_f;
-
-	//store result to echo, the amount defined by a fragment
-	//echo_mix_f = ((float)sample_i16 * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV);
-	//echo_mix_f *= ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
-	//echo_buffer[echo_buffer_ptr0] = (int16_t)echo_mix_f;
-	echo_buffer[echo_buffer_ptr0] = sample;
 
 	return sample;
 }
@@ -251,12 +251,22 @@ void bytebeat_init()
     bytebeat_song = 0;
     bytebeat_speed_div = 0;
 
+	#ifdef BOARD_WHALE
     BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
+	#endif
 }
 
 uint32_t bytebeat_next_sample()
 {
-/*	tt++;
+	int tt[4];
+	unsigned char s[4];
+	float mix1 = 0, mix2 = 0;
+	uint16_t sample1, sample2;
+	uint32_t bb_sample;
+
+	float stereo_mixing[STEREO_MIXING_STEPS] = {0.5f,0.4f,0.2f,0}; //50, 60, 80 and 100% mixing ratio
+
+	/*	tt++;
 
 	t[0] = tt/6;
 	//t[0] = tt/12;
@@ -526,11 +536,15 @@ uint32_t bytebeat_next_sample()
 	sample1 = (mix1*stereo_mixing[stereo_mixing_step]+mix2*(1.0f-stereo_mixing[stereo_mixing_step])) * BYTEBEAT_MIXING_VOLUME;
 	sample2 = (mix2*stereo_mixing[stereo_mixing_step]+mix1*(1.0f-stereo_mixing[stereo_mixing_step])) * BYTEBEAT_MIXING_VOLUME;
 
+	#ifdef BOARD_WHALE
 	if(bytebeat_echo_on)
 	{
+	#endif
 		sample1 = bytebeat_echo(sample1);
 		sample2 = bytebeat_echo(sample2);
+	#ifdef BOARD_WHALE
 	}
+	#endif
 
 	bb_sample = sample1;
 	bb_sample <<= 16;

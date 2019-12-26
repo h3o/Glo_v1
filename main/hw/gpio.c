@@ -32,16 +32,7 @@ void Delay(int d)
 void whale_init_power()
 {
 	gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
-	//if(rtc_get_reset_reason(0) == POWERON_RESET)
-    //{
-    	gpio_set_level(GPIO_NUM_2,1); //hold the power on
-    	brownout_init();
-    //}
-    //else
-    //{
-    //	gpio_set_level(GPIO_NUM_2,0); //power off
-    //	while(1);
-    //}
+	gpio_set_level(GPIO_NUM_2,1); //hold the power on
 }
 
 #ifdef BOARD_WHALE
@@ -49,9 +40,9 @@ void whale_shutdown()
 {
 	printf("whale_shutdown(): Shutting down...\n");
 	codec_set_mute(1); //mute the codec
-	Delay(1);
+	Delay(100);
 	codec_reset();
-	Delay(1);
+	Delay(100);
 	gpio_set_level(GPIO_NUM_2,0); //power off
 	RGB_LED_OFF;
 	while(1);

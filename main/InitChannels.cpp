@@ -19,6 +19,7 @@
 #include <Interface.h>
 #include <hw/init.h>
 #include <hw/gpio.h>
+#include <hw/leds.h>
 #include <hw/signals.h>
 #include <hw/sdcard.h>
 #include "glo_config.h"
@@ -131,10 +132,12 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
 			//FILTERS_TYPE_AND_ORDER = FILTERS_TYPE_LOW_PASS + FILTERS_ORDER_2;
 		}
 
-		filters_and_signals_init(resonance);
+		filters_init(resonance);
 		//printf("[filters_and_signals_init]Free heap: %u\n", xPortGetFreeHeapSize());
 		//if(!heap_caps_check_integrity_all(true)) { printf("---> HEAP CORRUPT!\n"); }
 	}
+
+	//printf("channel_init(): [1] total_chords = %d\n", fil->chord->total_chords);
 
 	//----------------------------------------------------------------
 
@@ -215,7 +218,7 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
 		noise_volume_max = 0;//1.0f;
 		noise_volume = 0;//1.0f;
 		noise_boost_by_sensor = 0;
-		PROG_add_plain_noise = false;
+		//PROG_add_plain_noise = false;
 
 		//OpAmp_ADC12_signal_conversion_factor = OPAMP_ADC12_CONVERSION_FACTOR_DEFAULT;
 	}
@@ -246,17 +249,35 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
 	//echo_dynamic_loop_length = I2S_AUDIOFREQ;
 	//echo_dynamic_loop_length = I2S_AUDIOFREQ / 2;
 
-	//----------------------------------------------------------------
+    //if(PROG_add_echo)
+    //{
+    	//printf("clear echo buffer (size=%d)...",sizeof(echo_buffer));
+    	//memset(echo_buffer,0,sizeof(echo_buffer));
+    	printf("clear echo buffer (size=%d)...",ECHO_BUFFER_LENGTH*sizeof(int16_t));
+    	memset(echo_buffer,0,ECHO_BUFFER_LENGTH*sizeof(int16_t));
+    	echo_buffer_ptr0 = 0;
+    	printf("done!\n");
+    //}
+
+    //----------------------------------------------------------------
 
 	bit_crusher_reverb = BIT_CRUSHER_REVERB_DEFAULT;
 
     REVERB_MIXING_GAIN_MUL = 9; //amount of signal to feed back to reverb loop, expressed as a fragment
     REVERB_MIXING_GAIN_DIV = 10; //e.g. if MUL=2 and DIV=3, it means 2/3 of signal is mixed in
 
-    reverb_dynamic_loop_length = /* I2S_AUDIOFREQ / */ BIT_CRUSHER_REVERB_DEFAULT; //set default value (can be changed dynamically)
+	//printf("channel_init(): [2] total_chords = %d\n", fil->chord->total_chords);
+
+	reverb_dynamic_loop_length = /* I2S_AUDIOFREQ / */ BIT_CRUSHER_REVERB_DEFAULT; //set default value (can be changed dynamically)
 	//reverb_buffer = (int16_t*)malloc(reverb_dynamic_loop_length*sizeof(int16_t)); //allocate memory
-	memset(reverb_buffer,0,REVERB_BUFFER_LENGTH*sizeof(int16_t)); //clear memory
+    reverb_buffer = (int16_t*)malloc(REVERB_BUFFER_LENGTH*sizeof(int16_t));
+
+    //printf("channel_init(): [3] total_chords = %d\n", fil->chord->total_chords);
+
+    memset(reverb_buffer,0,REVERB_BUFFER_LENGTH*sizeof(int16_t)); //clear memory
 	reverb_buffer_ptr0 = 0; //reset pointer
+
+	//printf("channel_init(): [4] total_chords = %d\n", fil->chord->total_chords);
 
 	//----------------------------------------------------------------
 
@@ -276,10 +297,13 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
     channel_running = 1;
     volume_ramp = 1;
 
+    ui_button3_enabled = 1;
+    ui_button4_enabled = 1;
+
     //mics_off = 0; //let this persist across channels, but not stored in flash settings
 
     seconds = 0;
-    auto_power_off = global_settings.AUTO_POWER_OFF_TIMEOUT;
+    auto_power_off = persistent_settings.AUTO_POWER_OFF*600;//global_settings.AUTO_POWER_OFF_TIMEOUT;
     //printf("channel_init(): setting initial value for [auto_power_off] by global_settings.AUTO_POWER_OFF_TIMEOUT = %d\n", global_settings.AUTO_POWER_OFF_TIMEOUT);
 
 	TEMPO_BY_SAMPLE = get_tempo_by_BPM(tempo_bpm);
@@ -289,7 +313,12 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
 	melodyCounter = SHIFT_MELODY_NOTE_TIMING_BY_SAMPLE;
 
 	DELAY_BY_TEMPO = get_delay_by_BPM(tempo_bpm);
+
+	sequencer_LEDs_timing_seq = 0;
+
+	#ifdef BOARD_WHALE
 	BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_DEFAULT;
+	#endif
 
 	if(use_binaural)
 	{
@@ -298,6 +327,7 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
     //this is done in volume ramp
     //codec_set_mute(0); //un-mute the codec
 
+	/*
 	//init MIDI if needed
 	#ifdef SEND_MIDI_NOTES
 	if(use_midi)
@@ -305,12 +335,25 @@ void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, f
 		gecho_init_MIDI(MIDI_UART);
 	}
 	#endif
+	*/
 
-	#ifdef ENABLE_SD_RECORDING
-	xTaskCreatePinnedToCore((TaskFunction_t)&sd_recording, "sd_recording_task", 2048, NULL, 12, NULL, 1);
-	#endif
+	if(use_acc_or_ir_sensors==PARAMETER_CONTROL_SENSORS_IRS)
+	{
+		sensors_active = 1;
+	}
+	if(use_acc_or_ir_sensors==PARAMETER_CONTROL_SENSORS_ACCELEROMETER)
+	{
+		accelerometer_active = 1;
+	}
+
+	//#ifdef ENABLE_SD_RECORDING
+	//xTaskCreatePinnedToCore((TaskFunction_t)&sd_recording, "sd_recording_task", 2048, NULL, 12, NULL, 1);
+	//sd_write_buf = (uint32_t*)malloc(SD_WRITE_BUFFER);
+	//#endif
 
 	//----------------------------------------------------------------
+
+	LEDs_all_OFF();
 }
 
 /*
@@ -357,13 +400,28 @@ void channel_deinit()
     }
     */
 
-    codec_set_mute(1); //mute the codec
-
 	//printf("[codec_reset]Free heap: %u\n", xPortGetFreeHeapSize());
 	//if(!heap_caps_check_integrity_all(true)) { printf("---> HEAP CORRUPT!\n"); }
 
 	channel_running = 0;
+	sd_playback_channel = 0;
     volume_ramp = 0;
+	select_channel_RDY_idle_blink = 1;
+	sensors_active = 0;
+	accelerometer_active = 0;
+	ui_button3_enabled = 1;
+	ui_button4_enabled = 1;
+
+    if(channel_uses_codec)
+    {
+    	codec_set_mute(1); //mute the codec
+    	if(persistent_settings.SAMPLING_RATE != SAMPLE_RATE_DEFAULT)
+    	{
+    		set_sampling_rate(persistent_settings.SAMPLING_RATE);
+    	}
+    }
+
+    Delay(10); //wait till IR sensors / LEDs indication stopped
 
     if(use_binaural)
     {
@@ -432,6 +490,13 @@ void channel_deinit()
 		//if(!heap_caps_check_integrity_all(true)) { printf("---> HEAP CORRUPT!\n"); }
 	}
 
+	if(reverb_buffer!=NULL)
+	{
+		printf("free(reverb_buffer)\n");
+		free(reverb_buffer);
+		reverb_buffer=NULL;
+	}
+
     printf("Channel finished.\n");
     //Delay(500);
 
@@ -459,12 +524,12 @@ void channel_deinit()
     //Delay(500);
     */
 
+	#ifdef BOARD_WHALE
     //RGB_LEDs_blink(2,10);
 	RGB_LED_OFF;
 
     //Delay(500);
 
-	#ifdef BOARD_WHALE
     //the channel probably ended by triggering one of these events
     short_press_button_play = 0;
     long_press_button_play = 0;
@@ -473,8 +538,13 @@ void channel_deinit()
     //also reset the depending variables
     event_next_channel = 0;
     event_channel_options = 0;
+    ui_ignore_events = 0;
+    context_menu_active = 0;
+    settings_menu_active = 0;
 
+	#ifdef BOARD_WHALE
     BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_DEFAULT;
+	#endif
 
     /*
     printf("while(BUTTON_U1_ON); //wait till PWR button released... ");
@@ -498,13 +568,17 @@ void channel_deinit()
 
     indicate_binaural(NULL); //turn off LED
 
-	//deinit MIDI if needed
+	/*
+    //deinit MIDI if needed
 	#ifdef SEND_MIDI_NOTES
 	if(use_midi)
 	{
 		gecho_deinit_MIDI(MIDI_UART);
 	}
 	#endif
+	*/
+
+	LEDs_all_OFF();
 
 	printf("done\n");
     //Delay(500);

@@ -36,6 +36,9 @@
 #include <FreqDetect.h>
 //#include <hw/init.h>
 #include <hw/gpio.h>
+#include <hw/sdcard.h>
+#include <hw/midi.h>
+#include <hw/leds.h>
 //#include <hw/sha1.h>
 //#include <stdio.h>
 
@@ -60,26 +63,8 @@ const uint8_t DCO_Synth::sinetable256[256] = {
 	76,73,70,67,64,62,59,56,54,51,49,46,44,42,39,37,35,33,31,29,27,25,23,21,20,18,16,15,14,12,11,10,9,7,6,5,5,4,3,2,2,1,1,1,0,0,0
 };
 
-uint8_t DCO_Synth::*sawtable256;
-uint8_t DCO_Synth::*squaretable256;
-int erase_echo = 0;
-
-int param = 0, waveform = 1, drift_params = 0, drift_params_cnt;
-//#define DCO_MAX_PARAMS	8	//DCO_BLOCKS_ACTIVE,FREQ,DOUBLE,PHASEamt,ENVamt,RESO,ATTACK,RELEASE
-#define DCO_MAX_PARAMS	5	//FREQ,DOUBLE,PHASEamt,ENVamt,RESO
-#define DCO_WAVEFORMS	4	//sine,square,saw,off
-#define DRIFT_PARAMS_MAX	6	//off, slowly wander, drift or randomize every time at various timing: 1/2,1/4,1/8
-
-#define DCO_FREQ_DEFAULT 32000
-
-int dco_oversample = 1;
-int shift_param = 0;
-int dco_control_mode = 0;
-#ifdef USE_AUTOCORRELATION
-#define DCO_CONTROL_MODES 3	//acc,buttons,voice
-#else
-#define DCO_CONTROL_MODES 2	//acc,buttons
-#endif
+//uint8_t DCO_Synth::*sawtable256;
+//uint8_t DCO_Synth::*squaretable256;
 
 DCO_Synth::DCO_Synth()
 {
@@ -187,6 +172,8 @@ void DCO_Synth::v1_init()//int mode)
 void DCO_Synth::v1_play_loop()
 {
 	int i;
+
+	int midi_override = 0;
 
 	while(!event_next_channel)
 	{
@@ -328,7 +315,7 @@ void DCO_Synth::v1_play_loop()
 		//apply dynamic limiter
 		echo_mix_f = (float)sample_i16 * limiter_coeff;
 
-		if(echo_mix_f < -DYNAMIC_LIMITER_THRESHOLD_ECHO && limiter_coeff > 0)
+		if(echo_mix_f < -DYNAMIC_LIMITER_THRESHOLD_ECHO_DCO && limiter_coeff > 0)
 		{
 			limiter_coeff *= DYNAMIC_LIMITER_COEFF_MUL_DCO;
 		}
@@ -386,7 +373,7 @@ void DCO_Synth::v1_play_loop()
 		//apply dynamic limiter
 		echo_mix_f = (float)sample_i16 * limiter_coeff;
 
-		if(echo_mix_f < -DYNAMIC_LIMITER_THRESHOLD_ECHO && limiter_coeff > 0)
+		if(echo_mix_f < -DYNAMIC_LIMITER_THRESHOLD_ECHO_DCO && limiter_coeff > 0)
 		{
 			limiter_coeff *= DYNAMIC_LIMITER_COEFF_MUL_DCO;
 		}
@@ -430,6 +417,7 @@ void DCO_Synth::v1_play_loop()
 		//---------------------------------------------------------------------------------------
 		sample32 += sample_i16;
 
+		#ifdef BOARD_WHALE
 		if(add_beep)
 		{
 			if(sampleCounter & (1<<add_beep))
@@ -437,16 +425,18 @@ void DCO_Synth::v1_play_loop()
 				sample32 += (100 + (100<<16));
 			}
 		}
+		#endif
 
 		for(i=0;i<dco_oversample;i++)
 		{
 			i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+			sd_write_sample(&sample32);
 		}
 
 		#if defined(MIX_INPUT) || defined(USE_AUTOCORRELATION)
 		for(i=0;i<dco_oversample;i++)
 		{
-			ADC_result = i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+			/*ADC_result = */i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
 		}
 		#endif
 
@@ -454,31 +444,13 @@ void DCO_Synth::v1_play_loop()
 
 		sampleCounter++;
 
-		if (TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION)
+		if(TIMING_BY_SAMPLE_1_SEC)
 		{
 			sampleCounter = 0;
 			seconds++;
-
-			/*if(event_channel_options)
-			{
-				event_channel_options = 0;
-				erase_echo = 2;
-				printf("erasing echo...\n");
-			}
-			else*/
-			/*
-			if(erase_echo)
-			{
-				printf("erasing echo...\n");
-				erase_echo--;
-				if(!erase_echo)
-				{
-					printf("erasing echo done!\n");
-				}
-			}
-			*/
 		}
 
+		#ifdef BOARD_WHALE
 		if (TIMING_BY_SAMPLE_EVERY_100_MS==0)
 		{
 			RGB_LED_R_OFF;
@@ -496,12 +468,45 @@ void DCO_Synth::v1_play_loop()
 			if(param==3) { RGB_LED_G_ON; }
 			if(param==4) { RGB_LED_R_ON; }
 		}
+		#endif
 
-		if (TIMING_BY_SAMPLE_EVERY_10_MS==0) //100Hz
+		ui_command = 0;
+
+		if (TIMING_EVERY_20_MS==31) //50Hz
 		{
+			#define DCO_UI_CMD_NEXT_PARAM			1
+			#define DCO_UI_CMD_PREV_PARAM			2
+			#define DCO_UI_CMD_OVERSAMPLE_UP		3
+			#define DCO_UI_CMD_OVERSAMPLE_DOWN		4
+			#define DCO_UI_CMD_NEXT_WAVEFORM		5
+			#define DCO_UI_CMD_NEXT_DELAY			6
+			#define DCO_UI_CMD_RANDOMIZE_PARAMS		7
+			#define DCO_UI_CMD_DRIFT_PARAMS			8
+
+			//map UI commands
+			#ifdef BOARD_WHALE
+			if(short_press_volume_plus) { ui_command = DCO_UI_CMD_NEXT_PARAM; short_press_volume_plus = 0; }
+			if(short_press_volume_minus) { ui_command = DCO_UI_CMD_PREV_PARAM; short_press_volume_minus = 0; }
+			if(short_press_sequence==2) { ui_command =  DCO_UI_CMD_OVERSAMPLE_UP; short_press_sequence = 0; }
+			if(short_press_sequence==-2) { ui_command = DCO_UI_CMD_OVERSAMPLE_DOWN; short_press_sequence = 0; }
+			if(short_press_sequence==3) { ui_command = DCO_UI_CMD_NEXT_WAVEFORM; short_press_sequence = 0; }
+			if(short_press_sequence==-3) { ui_command = DCO_UI_CMD_NEXT_DELAY; short_press_sequence = 0; }
+			if(short_press_sequence==SEQ_PLUS_MINUS) { ui_command = DCO_UI_CMD_RANDOMIZE_PARAMS; short_press_sequence = 0; }
+			if(short_press_sequence==SEQ_MINUS_PLUS) { ui_command = DCO_UI_CMD_DRIFT_PARAMS; short_press_sequence = 0; }
+			#endif
+
+			#ifdef BOARD_GECHO
+			if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = DCO_UI_CMD_DRIFT_PARAMS; btn_event_ext = 0; }
+			if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = DCO_UI_CMD_NEXT_WAVEFORM; btn_event_ext = 0; }
+			if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2) { ui_command =  DCO_UI_CMD_OVERSAMPLE_UP; btn_event_ext = 0; }
+			if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1) { ui_command = DCO_UI_CMD_OVERSAMPLE_DOWN; btn_event_ext = 0; }
+			//if(event_channel_options) { ui_command = DCO_UI_CMD_RANDOMIZE_PARAMS; event_channel_options = 0; }
+			#endif
+
 			//FREQ = ADC_last_result[0] * 4;
 			//FREQ = (uint16_t)((acc_res[0] + 1.0f) * 440.0f * 16);
 
+			#ifdef BOARD_WHALE
 			if(event_channel_options)
 			{
 				event_channel_options = 0;
@@ -514,10 +519,8 @@ void DCO_Synth::v1_play_loop()
 				printf("DCO Control mode = %d\n", dco_control_mode);
 			}
 
-			if(short_press_volume_plus)
+			if(ui_command==DCO_UI_CMD_NEXT_PARAM)
 			{
-				short_press_volume_plus = 0;
-
 				if(dco_control_mode==1 || dco_control_mode==2)
 				{
 					param++;
@@ -528,11 +531,8 @@ void DCO_Synth::v1_play_loop()
 				}
 			}
 
-
-			if(short_press_volume_minus)
+			if(ui_command==DCO_UI_CMD_PREV_PARAM)
 			{
-				short_press_volume_minus = 0;
-
 				if(dco_control_mode==1 || dco_control_mode==2)
 				{
 					param--;
@@ -542,10 +542,10 @@ void DCO_Synth::v1_play_loop()
 					}
 				}
 			}
+			#endif
 
-			if(short_press_sequence==-2)
+			if(ui_command==DCO_UI_CMD_OVERSAMPLE_DOWN)
 			{
-				short_press_sequence = 0;
 				if(dco_oversample<8)
 				{
 					//dco_oversample*=2;
@@ -554,9 +554,8 @@ void DCO_Synth::v1_play_loop()
 				printf("DCO Oversample = %d\n", dco_oversample);
 			}
 
-			if(short_press_sequence==2)
+			if(ui_command==DCO_UI_CMD_OVERSAMPLE_UP)
 			{
-				short_press_sequence = 0;
 				if(dco_oversample>1)
 				{
 					//dco_oversample/=2;
@@ -565,10 +564,8 @@ void DCO_Synth::v1_play_loop()
 				}
 			}
 
-			if(short_press_sequence==3)
+			if(ui_command==DCO_UI_CMD_NEXT_WAVEFORM)
 			{
-				short_press_sequence = 0;
-
 				waveform++;
 				if(waveform==1)
 				{
@@ -589,10 +586,9 @@ void DCO_Synth::v1_play_loop()
 				printf("waveform set to type #%d\n",waveform);
 			}
 
-			if(short_press_sequence==-3)
+			#ifdef BOARD_WHALE
+			if(ui_command==DCO_UI_CMD_NEXT_DELAY)
 			{
-				short_press_sequence = 0;
-
 				if(echo_dynamic_loop_current_step!=ECHO_DYNAMIC_LOOP_LENGTH_ECHO_OFF)
 				{
 					echo_dynamic_loop_current_step = ECHO_DYNAMIC_LOOP_LENGTH_ECHO_OFF;
@@ -604,14 +600,16 @@ void DCO_Synth::v1_play_loop()
 				echo_dynamic_loop_length = echo_dynamic_loop_steps[echo_dynamic_loop_current_step];
 				printf("echo set to step #%d, length = %d\n",echo_dynamic_loop_current_step,echo_dynamic_loop_length);
 			}
+			#endif
 
-			if(short_press_sequence==SEQ_PLUS_MINUS)
+			if(ui_command==DCO_UI_CMD_RANDOMIZE_PARAMS)
 			{
-				short_press_sequence = 0;
-
 				//randomize all params
-				new_random_value();
-				FREQ = random_value;
+				if(!midi_override)
+				{
+					new_random_value();
+					FREQ = random_value;
+				}
 				new_random_value();
 				DOUBLE = random_value;
 				PHASEamt = random_value<<8;
@@ -620,9 +618,8 @@ void DCO_Synth::v1_play_loop()
 				new_random_value();
 				RESO = random_value;
 			}
-			if(short_press_sequence==SEQ_MINUS_PLUS)
+			if(ui_command==DCO_UI_CMD_DRIFT_PARAMS)
 			{
-				short_press_sequence = 0;
 				drift_params++;
 				if(drift_params==DRIFT_PARAMS_MAX+1)
 				{
@@ -632,97 +629,119 @@ void DCO_Synth::v1_play_loop()
 				printf("drift_params = %d\n", drift_params);
 			}
 
-			if(dco_control_mode==0)
+			if(!drift_params)
 			{
-				if(!shift_param && (acc_res[0] > 0.3f))
+				if(use_acc_or_ir_sensors==PARAMETER_CONTROL_SENSORS_ACCELEROMETER)
 				{
-					printf("shift_param = 1, param++\n");
-					shift_param = 1;
-					param++;
-					if(param==DCO_MAX_PARAMS)
+					if(dco_control_mode==0)
 					{
-						param = 0;
+						if(!shift_param && (acc_res[0] > 0.3f))
+						{
+							printf("shift_param = 1, param++\n");
+							shift_param = 1;
+							param++;
+							if(param==DCO_MAX_PARAMS)
+							{
+								param = 0;
+							}
+							sampleCounter = 0;
+						}
+						else if(!shift_param && (acc_res[0] < -0.3f))
+						{
+							printf("shift_param = 1, param--\n");
+							shift_param = 1;
+							param--;
+							if(param<0)
+							{
+								param = DCO_MAX_PARAMS - 1;
+							}
+							sampleCounter = 0;
+						}
+						else if(shift_param && (fabs(acc_res[0]) < 0.2f))
+						{
+							shift_param = 0;
+							printf("shift_param = 0\n");
+						}
 					}
-					sampleCounter = 0;
-				}
-				else if(!shift_param && (acc_res[0] < -0.3f))
-				{
-					printf("shift_param = 1, param--\n");
-					shift_param = 1;
-					param--;
-					if(param<0)
-					{
-						param = DCO_MAX_PARAMS - 1;
-					}
-					sampleCounter = 0;
-				}
-				else if(shift_param && (fabs(acc_res[0]) < 0.2f))
-				{
-					shift_param = 0;
-					printf("shift_param = 0\n");
-				}
-			}
 
-			//printf("acc_res[0-2]==%f,\t%f,\t%f...\t", acc_res[0],acc_res[1],acc_res[2]);
-			if(param==0) //FREQ
-			{
-				FREQ = (uint16_t)(acc_res[1] * DCO_FREQ_DEFAULT * 2);
-				//printf("FREQ=%d\n",FREQ);
-			}
-			if(param==1) //DOUBLE
-			{
-				DOUBLE = (uint8_t)(acc_res[1] * 256);
-				//printf("DOUBLE=%d\n",DOUBLE);
-			}
-			if(param==2) //PHASEamt
-			{
-				PHASEamt = (uint8_t)(acc_res[1] * 256);
-				//printf("PHASEamt=%d\n",PHASEamt);
-			}
-			if(param==3) //ENVamt
-			{
-				ENVamt = (uint8_t)(acc_res[1] * 32);
-				//printf("ENVamt=%d\n",ENVamt);
-			}
-			if(param==4) //RESO
-			{
-				RESO = (uint16_t)(acc_res[1] * 4096);
-				//printf("RESO=%d\n",RESO);
-			}
-			/*
-			if(param==5) //DCO_BLOCKS_ACTIVE
-			{
-				DCO_BLOCKS_ACTIVE = (uint8_t)(((acc_res[1] + 1.0f) * (DCO_BLOCKS_MAX-1))/2);
-				printf("DCO_BLOCKS_ACTIVE=%d\n",DCO_BLOCKS_ACTIVE);
-			}
-			*/
-			/*
-			if(!erase_echo && acc_res[2] > 0.7f)
-			{
-				erase_echo = 2;
-			}
-			else
-			{
-				erase_echo = 0;
-			}
-			*/
-			if(acc_res[2] > 0.7f)
-			{
-				//ECHO_MIXING_GAIN_MUL = 1.0f;
-				//if(erase_echo!=1) printf("setting erase_echo => 1\n");
-				erase_echo = 1;
-			}
-			else if(acc_res[0] < -0.7f)
-			{
-				//ECHO_MIXING_GAIN_MUL = 1.0f;
-				//if(erase_echo!=2) printf("setting erase_echo => 2\n");
-				erase_echo = 2;
-			}
-			else
-			{
-				//ECHO_MIXING_GAIN_MUL = 3.0f;
-				//if(erase_echo!=0) printf("setting erase_echo => 0\n");
-				erase_echo = 0;
+					//printf("acc_res[0-2]==%f,\t%f,\t%f...\t", acc_res[0],acc_res[1],acc_res[2]);
+					if(param==0) //FREQ
+					{
+						FREQ = (uint16_t)(acc_res[1] * DCO_FREQ_DEFAULT * 2);
+						//printf("FREQ=%d\n",FREQ);
+					}
+					if(param==1) //DOUBLE
+					{
+						DOUBLE = (uint8_t)(acc_res[1] * 256);
+						//printf("DOUBLE=%d\n",DOUBLE);
+					}
+					if(param==2) //PHASEamt
+					{
+						PHASEamt = (uint8_t)(acc_res[1] * 256);
+						//printf("PHASEamt=%d\n",PHASEamt);
+					}
+					if(param==3) //ENVamt
+					{
+						ENVamt = (uint8_t)(acc_res[1] * 32);
+						//printf("ENVamt=%d\n",ENVamt);
+					}
+					if(param==4) //RESO
+					{
+						RESO = (uint16_t)(acc_res[1] * 4096);
+						//printf("RESO=%d\n",RESO);
+					}
+					/*
+					if(param==5) //DCO_BLOCKS_ACTIVE
+					{
+						DCO_BLOCKS_ACTIVE = (uint8_t)(((acc_res[1] + 1.0f) * (DCO_BLOCKS_MAX-1))/2);
+						printf("DCO_BLOCKS_ACTIVE=%d\n",DCO_BLOCKS_ACTIVE);
+					}
+					*/
+					/*
+					if(!erase_echo && acc_res[2] > 0.7f)
+					{
+						erase_echo = 2;
+					}
+					else
+					{
+						erase_echo = 0;
+					}
+					*/
+					if(acc_res[2] > 0.7f)
+					{
+						//ECHO_MIXING_GAIN_MUL = 1.0f;
+						//if(erase_echo!=1) printf("setting erase_echo => 1\n");
+						erase_echo = 1;
+					}
+					else if(acc_res[0] < -0.7f)
+					{
+						//ECHO_MIXING_GAIN_MUL = 1.0f;
+						//if(erase_echo!=2) printf("setting erase_echo => 2\n");
+						erase_echo = 2;
+					}
+					else
+					{
+						//ECHO_MIXING_GAIN_MUL = 3.0f;
+						//if(erase_echo!=0) printf("setting erase_echo => 0\n");
+						erase_echo = 0;
+					}
+				}
+				else //if sensors used
+				{
+					if(!midi_override)
+					{
+						FREQ = (uint16_t)(ir_res[0] * DCO_FREQ_DEFAULT * 2);
+						//printf("FREQ=%d\n",FREQ);
+					}
+
+					DOUBLE = (uint8_t)(ir_res[1] * 256);
+					//printf("DOUBLE=%d\n",DOUBLE);
+					PHASEamt = (uint8_t)(ir_res[2] * 256);
+					//printf("PHASEamt=%d\n",PHASEamt);
+					ENVamt = (uint8_t)(ir_res[3] * 32);
+					//printf("ENVamt=%d\n",ENVamt);
+					RESO = (uint16_t)(ir_res[3] * 4096);
+				}
 			}
 
 			#ifdef USE_AUTOCORRELATION
@@ -826,24 +845,58 @@ void DCO_Synth::v1_play_loop()
 			#endif
 		}
 
-		if (TIMING_BY_SAMPLE_EVERY_125_MS == 39) //8Hz
+		if (TIMING_EVERY_20_MS == 47) //50Hz
 		{
-			if(drift_params==3 || (drift_params==2 && drift_params_cnt%2==0) || (drift_params==1 && drift_params_cnt%4==0))
+			if(!midi_override && MIDI_keys_pressed)
+			{
+				printf("MIDI active, will receive chords\n");
+				midi_override = 1;
+			}
+
+			if(midi_override && MIDI_notes_updated)
+			{
+				MIDI_notes_updated = 0;
+
+				LED_W8_all_OFF();
+				LED_B5_all_OFF();
+
+				MIDI_to_LED(MIDI_last_chord[0], 1);
+
+				FREQ = MIDI_note_to_freq(MIDI_last_chord[0]+36); //shift a couple octaves up as the FREQ parameter here works differently
+			}
+		}
+
+		//if (TIMING_EVERY_250_MS == 39) //4Hz
+		if (TIMING_EVERY_125_MS == 39) //8Hz
+		{
+			if(drift_params==4
+		   || (drift_params==3 && drift_params_cnt%2==0)
+		   || (drift_params==2 && drift_params_cnt%4==0)
+		   || (drift_params==1 && drift_params_cnt%8==0))
 			{
 				//adjust all params by small random value
 				new_random_value();
-				FREQ += ((int8_t)random_value)/8;
+				if(!midi_override)
+				{
+					FREQ += ((int8_t)random_value)/8;
+				}
 				DOUBLE += ((int8_t)(random_value>>8))/8;
 				PHASEamt += ((int8_t)(random_value>>16))/8;
 				ENVamt += ((int8_t)(random_value>>24))/8;
 				new_random_value();
 				RESO += ((int16_t)random_value/128);
 			}
-			else if(drift_params==6 || (drift_params==5 && drift_params_cnt%2==0) || (drift_params==4 && drift_params_cnt%4==0))
+			else if(drift_params==8
+				|| (drift_params==7 && drift_params_cnt%2==0)
+				|| (drift_params==6 && drift_params_cnt%4==0)
+				|| (drift_params==5 && drift_params_cnt%8==0))
 			{
 				//randomize all params
-				new_random_value();
-				FREQ = random_value;
+				if(!midi_override)
+				{
+					new_random_value();
+					FREQ = random_value;
+				}
 				new_random_value();
 				DOUBLE = random_value;
 				PHASEamt = random_value<<8;
@@ -852,7 +905,7 @@ void DCO_Synth::v1_play_loop()
 				new_random_value();
 				RESO = random_value;
 			}
-			#if 1
+			#if 0
 			else if(drift_params==9 || (drift_params==8 && drift_params_cnt%2==0) || (drift_params==7 && drift_params_cnt%4==0))
 			{
 				//randomize all params
@@ -922,13 +975,12 @@ void DCO_Synth::v1_play_loop()
 			drift_params_cnt++;
 		}
 
-		//if (TIMING_BY_SAMPLE_EVERY_50_MS == 33) //20Hz
-		if (TIMING_BY_SAMPLE_EVERY_10_MS == 33) //100Hz
+		if (TIMING_EVERY_20_MS == 33) //50Hz
 		{
 			if(limiter_coeff < DYNAMIC_LIMITER_COEFF_DEFAULT)
 			{
 				//limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @20Hz, limiter will fully recover within 1 second
-				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @ 100Hz, limiter will fully recover within 0.2 second
+				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @ 50Hz, limiter will fully recover within 0.4 second
 
 				printf("limiter_coeff=%f\n",limiter_coeff);
 			}

@@ -1,5 +1,7 @@
 [global_settings]
 
+TUNING_DEFAULT 				440.0
+
 TUNING_MIN					391.9954359818
 TUNING_MAX					493.8833012561
 
@@ -8,40 +10,183 @@ TUNING_INCREASE_COEFF		1.0057929410678534309188527497122	//10 cents, 120th root 
 //TUNING_INCREASE_COEFF		1.0116194403019224846862305670455	//20 cents, 60th root of 2
 //TUNING_INCREASE_COEFF		1.0145453349375236414538678576629	//25 cents, 48th root of 2
 
-AUTO_POWER_OFF_TIMEOUT				3600 //in seconds
-AUTO_POWER_OFF_ONLY_IF_NO_MOTION	1 //1=enabled, 0=disabled			
+GRANULAR_DETUNE_COEFF_SET	0.01
+GRANULAR_DETUNE_COEFF_MUL	2
+GRANULAR_DETUNE_COEFF_MAX	50 //above this produces some nasty noises
+
+TEMPO_BPM_DEFAULT			120
+TEMPO_BPM_MIN				10
+TEMPO_BPM_MAX				330
+TEMPO_BPM_STEP				5
+
+AUTO_POWER_OFF_TIMEOUT				4800	//maximum configurable timeout, in seconds
+AUTO_POWER_OFF_ONLY_IF_NO_MOTION	0		//1=enabled, 0=disabled			
+
+DEFAULT_ACCESSIBLE_CHANNELS			12		//number of channels accessible before unlocking the rest
+
+AGC_ENABLED							1		//1=enabled, 0=disabled
+AGC_TARGET_LEVEL					-5		//in dB
+AGC_MAX_GAIN						32		//in dB, default value
+AGC_MAX_GAIN_STEP					6		//in dB, increment/decrement
+AGC_MAX_GAIN_LIMIT					50		//in dB, max value (59dB limit)
+MIC_BIAS							2		//0=AVDD, 1=2.5V, 2=2V
+
+CODEC_ANALOG_VOLUME_DEFAULT			12 //0.5dB steps, -6dB
+//CODEC_ANALOG_VOLUME_DEFAULT			0 //0dB, maximum
+
+//CODEC_DIGITAL_VOLUME_DEFAULT			12 //0.5dB steps, -6dB
+CODEC_DIGITAL_VOLUME_DEFAULT		24 //0.5dB steps, -12dB
+
+CLOUDS_HARD_LIMITER_POSITIVE		15000
+CLOUDS_HARD_LIMITER_NEGATIVE		-15000
+CLOUDS_HARD_LIMITER_MAX				30000
+CLOUDS_HARD_LIMITER_STEP			5000
+
+DRUM_THRESHOLD_ON					0.38
+DRUM_THRESHOLD_OFF					0.32
+DRUM_LENGTH1						26880
+DRUM_LENGTH2						29060
+DRUM_LENGTH3						33036
+DRUM_LENGTH4						141116
+
+IDLE_SET_RST_SHORTCUT				4321 //43214321
+IDLE_RST_SET_SHORTCUT				3111
+IDLE_LONG_SET_SHORTCUT				2222
 
 [channels]
 
-1:high_pass:22,0,2,1.0,settings=1,binaural=1			//Rachel's song, sea 1+2 (water element)
-2:low_pass_high_reso:4,4,4,settings=1,binaural=2		//Air on the G string, forest (earth element)
-3:low_pass:2,2,settings=1,binaural=3					//Epic ad song, wind (wind element)
-4:high_pass:21,21,6,0.5,settings=1,binaural=4			//GITS, creek, lower bg sample volume (alternative water element)
+1:high_pass:22,0,2,1.0,settings=1,binaural=1		//Rachel's song, sea 1+2 (water element)
+2:low_pass_high_reso:4,4,4,settings=1,binaural=2	//Air on the G string, forest (earth element)
+3:low_pass:2,2,settings=1,binaural=3				//Epic ad song, wind (wind element)
+4:high_pass:21,21,6,0.5,settings=1,binaural=4		//GITS, creek, lower bg sample volume (alternative water element)
 
-11:white_noise:settings=1					//pure white noise
-12:antarctica:settings=1					//song of wind and ice
+11:original_channel_one		//gecho v1 channel #1 port
+12:antarctica:settings=1	//song of wind and ice
+13:white_noise:settings=1	//pure white noise
+14:bytebeat:settings=2		//bytebeat
 
-31:direct_waves:1,settings=1,binaural=5				//space channel with reverb (fire element)
-32:direct_waves:0,settings=1,binaural=6				//space channel, no reverb (alternative fire element)
-33:dco:settings=2							//DCO synth (seasick Jonah)
+//21:
+//22:
+23:filter_flanger			//looper with LPF, HPF and flanger
+24:infinite_looper			//looper with warping and reversible delay
 
-231:drum_kit:settings=2						//drum kit
 
-331:pass_through_mics:settings=1
-332:pass_through_linein:settings=1
-333:midi_in_test:settings=1
-334:sync_out_test:settings=1
+31:granular:settings=2		//granular sampler
+32:reverb:settings=2		//decaying reverb
+33:dekrispator:settings=2	//dekrispator
+34:clouds:settings=2		//Mutable Instruments Clouds port
 
-3311:sd_card_info
-3312:sd_card_speed_test
-3313:sd_card_file_list
+41:dco:settings=2							//DCO synth from v1 model
+//42:
+43:direct_waves:0,settings=1,binaural=6		//space channel, no reverb (alternative fire element)
+44:direct_waves:1,settings=1,binaural=5		//space channel with reverb (fire element)
 
-431:dekrispator:settings=2					//dekrispator
-432:clouds:settings=2						//Mutable Instruments Clouds port
+//??:dco:settings=2					//DCO synth (seasick Jonah)
+//??:sampled_drum_seq:settings=2	//sampled drum sequencer
+//??:sampler_looper:settings=2		//sampler & looper using SD card
 
-421:reverb:settings=2						//decaying reverb
-411:granular:settings=2						//granular sampler
-441:bytebeat:settings=2						//bytebeat
+//111:song_program:settings=1		//program new custom song
+112:song_program:settings=2		//load custom song
+113:song_program:settings=3		//store custom song
+114:song_program:settings=4		//clear custom song
+
+111:program_song:settings=1		//program new custom song
+//112:program_song:settings=2		//load custom song
+//113:program_song:settings=3		//store custom song
+//114:program_song:settings=4		//clear custom song
+
+121:drum_kit:settings=2				//drum kit
+//122:
+123:pass_through_mics:settings=1	//field recording via mics
+124:pass_through_linein:settings=1	//recording via line-in / pickups
+
+//131:
+//132:
+//133:
+//134:
+
+//141:
+//142:
+//143:
+//144:
+
+//211:
+//212:
+//213:
+//214:
+
+//221:
+//222:
+//223:
+//224:
+
+//231:
+//232:
+//233:
+//234:
+
+//241:
+//242:
+//243:
+//244:
+
+//344:all_the_sounds					//Simon Magpie's "A Song With ALL THE SOUNDS" https://www.youtube.com/watch?v=wA7-iLgjnzA
+//433:pass_through_mics:settings=273	//John Cage's 4'33 of ambient sound only
+
+//custom song
+1111:high_pass:999,0,2,1.0,settings=1,binaural=1			//sea 1+2 (water element)
+1112:low_pass_high_reso:999,0,4,settings=1,binaural=2		//forest (earth element)
+1113:low_pass:999,0,settings=1,binaural=3					//wind (wind element)
+1114:high_pass:999,0,6,0.5,settings=1,binaural=4			//creek, lower bg sample volume (alternative water element)
+
+2222:play_last_recording			//play back most recent recorded file 
+3333:controls_set:settings=3		//set controls to 3D accelerometer
+4444:controls_set:settings=4		//set controls to 4 IR sensors
+
+1234:sd_card_download
+
+3111:memory_info
+3112:board_sn_info					//display board s/n as a BCD number
+3113:accelerometer_test
+3114:sensors_test
+
+3121:midi_in_test
+3122:midi_in_hw_test
+3123:midi_out_test
+
+3124:all_leds_test
+
+3131:sync_in_test
+3132:sync_out_test
+3133:cv_in_test
+3134:cv_out_test
+
+3141:sd_card_info
+3142:sd_card_speed_test
+3143:sd_card_files_info
+//3144:
+
+3211:sd_card_play:44100,str="samples/h2o_3_b3f0r3_bu4.wav"
+3212:sd_card_play:48000,str="samples/mk.wav"
+3213:sd_card_play:44100,str="samples/01_The Styllers_rave_mod_stereo_mix_70-30.wav"
+3214:sd_card_play:44100,str="samples/01_The Styllers.wav"
+
+//service commands
+
+4111:running_partition_info		//info about partition from which the current firmware runs 
+4112:fw_version_info			//display firmware version as a BCD number 
+4222:config_write				//write config to SD card
+
+4321:settings_reset				//clear persistent settings
+
+4441:mic_bias_set:settings=0	//AVDD
+4442:mic_bias_set:settings=2	//2V
+4443:mic_bias_set:settings=1	//2.5V
+
+//longer codes so won't get typed in accidentally 
+44112233:sd_firmware_update		//load firmware update from SD card
+44223344:factory_data_load		//load config and samples from SD card
+44332211:factory_reset			//discard updates & revert to factory firmware
 
 [binaural_beats_by_channel]
 
@@ -64,6 +209,32 @@ alpha:[0,0; 30,7.5; 60,12.5; 90,9; 180,7.5; 360,12.5; 420:0]
 beta:[0,0; 30,12.5; 60,30; 90,19; 180,12.5; 360,30; 420:0]
 delta:[0,0; 30,0.5; 60,4; 90,1; 180,2; 360,4; 420:0]
 theta:[0,0; 30,4; 60,7; 90,5; 180,4; 360,7; 420:0]
+
+[isochronic_tones]
+
+//www.livingflow.net/isochronic-tones-work/
+
+ALPHA_LOW			8
+ALPHA_HIGH			12
+BETA_LOW			13
+BETA_HIGH			44	//beta to gamma range
+DELTA_LOW			1
+DELTA_HIGH			3	//center at 2
+THETA_LOW			4
+THETA_HIGH			7
+PROGRAM_LENGTH		180		//in seconds			
+TONE_LENGTH			1000	//in samples
+TONE_LENGTH_STEP	500
+TONE_LENGTH_MAX		5000
+TONE_CUTOFF			1.5
+//TONE_CUTOFF_STEP	0.1
+//TONE_CUTOFF_MAX	2.0
+TONE_VOLUME			0.05
+TONE_VOLUME_STEP	0.002
+TONE_VOLUME_MAX		0.5
+WIND_VOLUME			800.0
+SIGNAL_LIMIT_MIN	-500.0
+SIGNAL_LIMIT_MAX	2200.0
 
 [samples_map]
 
@@ -256,6 +427,9 @@ a3c#4e4	//A (major) chord
 song=44
 a3a4a5 //one note per 3 octaves
 
+song=1000
+c4e4g4 //a placeholder chord for channels that use dynamically controlled MusicBox object 
+
 [dekrispator_patches]
 
 //1
@@ -369,8 +543,6 @@ MagicFX():110,101,104,97,73,35,77,68,90,62, //(interesting too, recorded)
 MagicPatch():22,67,39,84,87,55,97,75,87,58,90,35,89,2,92,122,58,88,115,24,35,74,51,61,61,54,46,109,48,69,124,1,40,6,120,110,78,93,48,60,22,
 MagicFX():104,110,76,12,80,28,54,47,25,75,
 
-//turning off envelope (filters still off)
-
 //28 aliens talking
 MagicPatch():77,66,8,49,113,93,48,48,76,18,40,19,102,37,31,25,79,8,65,92,13,117,95,6,110,104,96,34,46,5,81,67,34,40,120,92,114,8,56,124,116,
 MagicFX():58,89,14,17,126,102,20,12,92,125,
@@ -399,7 +571,7 @@ MagicFX():15,76,30,22,66,121,24,38,57,41,
 MagicPatch():24,34,43,116,87,63,11,44,27,31,24,44,37,23,3,2,94,98,4,13,109,44,46,2,90,40,127,116,50,9,105,16,101,92,18,67,41,56,104,103,67,
 MagicFX():44,33,2,76,7,16,104,117,108,115,
 
-//35 too complex to run at any setting
+//35 resonances
 MagicPatch():8,45,92,115,47,38,63,16,108,126,79,13,98,125,57,38,51,69,110,77,63,17,12,90,36,111,123,85,96,37,4,39,91,97,78,92,2,92,22,83,20,
 MagicFX():26,108,127,126,94,71,55,76,4,10,
 
@@ -407,10 +579,134 @@ MagicFX():26,108,127,126,94,71,55,76,4,10,
 MagicFX():9,77,65,98,99,15,77,64,67,44,
 MagicPatch():83,46,5,77,68,95,5,58,62,90,44,25,48,78,101,98,119,53,121,27,9,72,120,111,1,29,94,70,43,16,96,21,39,96,37,28,53,123,80,47,38,
 
-//37 oversaturated static 
+//37 bass sounds 
 MagicPatch():51,47,38,65,84,86,24,11,39,110,86,42,91,80,56,113,92,14,42,98,99,24,45,85,118,21,38,45,63,6,106,51,42,91,75,106,60,40,126,97,62,
 MagicFX():27,22,62,82,122,49,89,17,17,32,
 
+//38 deep tones when knocked
+MagicPatch():109,54,48,78,85,120,116,73,28,54,56,4,14,10,119,56,11,32,83,43,12,60,12,59,112,22,83,21,39,86,21,50,5,58,70,43,108,11,28,71,67,
+MagicFX():47,22,76,17,9,96,56,3,114,125,
+
+//39 deep tones when knocked
+MagicPatch():31,40,119,45,69,114,112,41,36,126,82,126,99,38,72,120,96,37,34,12,86,41,29,101,93,32,95,118,30,16,99,12,95,107,111,110,97,84,87,59,119,
+MagicFX():47,22,76,17,9,96,56,3,114,125,
+
+//40 arguing aliens
+MagicPatch():31,40,119,45,69,114,112,41,36,126,82,126,99,38,72,120,96,37,34,12,86,41,29,101,93,32,95,118,30,16,99,12,95,107,111,110,97,84,87,59,119,
+MagicFX():75,114,123,106,38,60,31,30,115,33,
+
+//41 two overlaid sirens
+MagicPatch():84,88,91,92,117,89,24,28,54,48,66,116,50,23,0,9,101,108,20,120,94,104,92,9,83,38,75,118,9,73,34,27,30,127,114,125,66,112,56,12,77,
+MagicFX():115,24,23,0,8,35,63,3,124,124,
+
+//42 bass texture 
+MagicPatch():99,48,73,16,107,101,117,116,68,98,117,91,82,106,69,116,74,64,39,98,112,38,49,103,70,50,26,115,21,27,124,23,8,49,99,38,61,65,82,123,106,
+MagicFX():65,103,63,10,119,73,31,45,77,71,
+
+[dekrispator_sequences]
+
+seq=1,tempo=480
+
+27,29,31,34, //cdegc2
+39,41,43,46,
+51,53,55,58,
+63,65,67,70,
+75,70,67,65,
+63,58,55,53,
+51,46,43,41,
+39,34,31,29,
+
+//abcea2
+24,26,27,31,
+24+12,26+12,27+12,31+12,
+24+12*2,26+12*2,27+12*2,31+12*2,
+24+12*3,26+12*3,27+12*3,31+12*3,
+31+12*3+5,31+12*3,27+12*3,26+12*3,
+24+12*3,31+12*2,27+12*2,26+12*2,
+24+12*2,31+12,27+12,26+12,
+24+12,31,27,26,
+
+27,29,31,34, //cdegc2 ..............x2
+39,41,43,46,
+51,53,55,58,
+63,65,67,70,
+75,70,67,65,
+63,58,55,53,
+51,46,43,41,
+39,34,31,29,
+
+//abcea2 ..............x2
+24,26,27,31,
+24+12,26+12,27+12,31+12,
+24+12*2,26+12*2,27+12*2,31+12*2,
+24+12*3,26+12*3,27+12*3,31+12*3,
+31+12*3+5,31+12*3,27+12*3,26+12*3,
+24+12*3,31+12*2,27+12*2,26+12*2,
+24+12*2,31+12,27+12,26+12,
+24+12,31,27,26,
+
+//d#fga#d2# +2semi -> fgacf2
+24-4,26-4,28-4,31-4,
+24+12-4,26+12-4,28+12-4,31+12-4,
+24+12*2-4,26+12*2-4,28+12*2-4,31+12*2-4,
+24+12*3-4,26+12*3-4,28+12*3-4,31+12*3-4,
+31+12*3+1,31+12*3-4,28+12*3-4,26+12*3-4,
+24+12*3-4,31+12*2-4,28+12*2-4,26+12*2-4,
+24+12*2-4,31+12-4,28+12-4,26+12-4,
+24+12-4,31-4,28-4,26-4,
+
+// -> gabdg2
+24-2,26-2,28-2,31-2,
+24+12-2,26+12-2,28+12-2,31+12-2,
+24+12*2-2,26+12*2-2,28+12*2-2,31+12*2-2,
+24+12*3-2,26+12*3-2,28+12*3-2,31+12*3-2,
+31+12*3+3,31+12*3-2,28+12*3-2,26+12*3-2,
+24+12*3-2,31+12*2-2,28+12*2-2,26+12*2-2,
+24+12*2-2,31+12-2,28+12-2,26+12-2,
+24+12-2,31-2,28-2,26-2,
+
+//f#a#c#f +2semi -> g#cd#g
+23,27,30,34,
+23+12,27+12,30+12,34+12,
+23+12*2,27+12*2,30+12*2,34+12*2,
+23+12*3,27+12*3,30+12*3,34+12*3,
+35+12*3,34+12*3,30+12*3,27+12*3,
+23+12*3,34+12*2,30+12*2,27+12*2,
+23+12*2,34+12,30+12,27+12,
+23+12,34,30,27,
+
+//g#cd#g +2semi -> a#dfa
+25,29,32,36,
+25+12,29+12,32+12,36+12,
+25+12*2,29+12*2,32+12*2,36+12*2,
+25+12*3,29+12*3,32+12*3,36+12*3,
+37+12*3,36+12*3,32+12*3,29+12*3,
+25+12*3,36+12*2,32+12*2,29+12*2,
+25+12*2,36+12,32+12,29+12,
+25+12,36,32,29
+
+seq=2,tempo=360
+
+39,39,27,39,37,35,23,34,32,32,35,39,
+44,44,32,44,42,40,28,39,37,37,39,40,
+39,40,39,43,40,39,27,37,35,23,34,32,
+34,34,22,34,35,34,32,20,31,32,20,56
+
+seq=3,tempo=320
+
+32,32,34,35,32,32,34,35,32,32,34,35,32,32,34,35,
+44,44,46,47,44,44,46,47,44,44,46,47,44,44,46,47
+37,37,39,40,37,37,39,40,37,37,39,40,37,37,39,40,
+56,56,58,59,56,56,58,59,56,56,58,59,56,56,58,59,
+
+[clouds_patches]
+
+//pos,	size,	pitch,	density,texture,drywet,	spread, fback,	reverb,	post_gain	
+0.1,	0.5,	4.0,	0.89,	1.3,	1.0,	0.9,	0.4,	1.0,	1.5
+0.1,	0.4,	2.0,	0.89,	1.0,	1.0,	2.9,	0.5,	1.7,	1.5
+0.0,	0.2,	-4.0,	0.89,	1.7,	1.0,	8.9,	0.0,	0.9,	1.0
+0.0,	0.0,	12.0,	0.89,	1.5,	1.0,	11.9,	0.1,	0.5,	0.5
+0.0,	0.1,	0.0,	0.89,	1.5,	1.0,	8.9,	0.1, 	1.0,	0.7
 
 [something_else]
 
@@ -425,10 +721,6 @@ MagicFX():2,0,0,0,76,20,14,12,65,84,
 //dummy patch #3
 MagicPatch():3,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
 MagicFX():3,0,0,0,76,20,14,12,65,84,
-
-//dummy patch #4
-MagicPatch():4,0,0,0,29,85,98,122,58,65,98,0,16,107,87,75,100,54,43,115,10,12,66,17,125,67,34,40,1,25,67,26,88,115,28,67,43,2,93,33,11,
-MagicFX():4,0,0,0,76,20,14,12,65,84,
 
 [end]
 

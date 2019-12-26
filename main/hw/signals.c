@@ -22,15 +22,15 @@
 
 //-------------------------- sample and echo buffers -------------------
 
-uint32_t ADC_sample;
-uint32_t sample32;
+//uint32_t ADC_sample;
+//uint32_t sample32;
 
 volatile int16_t sample_i16 = 0;
 volatile uint16_t sample_u16 = 0;
 
-float sample_f[2],sample_mix,sample_lpf[2];
+float sample_f[2],sample_mix,sample_lpf[4],sample_hpf[4];
 
-int n_bytes, ADC_result;
+//int n_bytes, ADC_result;
 uint32_t ADC_sample, ADC_sample0;
 //int ADC_sample_valid = 0;
 uint32_t sample32;
@@ -42,7 +42,6 @@ int autocorrelation_result[4], autocorrelation_result_rdy;
 
 #ifdef ECHO_BUFFER_STATIC
 int16_t echo_buffer[ECHO_BUFFER_LENGTH];	//the buffer is allocated statically
-//int16_t echo_buffer[184192/2];	//184192 bytes required for clouds -> region `dram0_0_seg' overflowed by 34384 bytes
 #else
 int16_t *echo_buffer = NULL;	//the buffer is allocated dynamically
 #endif
@@ -55,32 +54,31 @@ int echo_dynamic_loop_current_step = 0;
 float ECHO_MIXING_GAIN_MUL, ECHO_MIXING_GAIN_DIV; //todo replace with one fragment value
 float echo_mix_f;
 
+const uint8_t echo_dynamic_loop_indicator[ECHO_DYNAMIC_LOOP_STEPS] = {0x11,0x01,0x06,0x02,0x04,0x08,0x20,0x80,0x21,0x06,0x28,0x0c,0x18,0x05,0x00};
 const int echo_dynamic_loop_steps[ECHO_DYNAMIC_LOOP_STEPS] = {
-	ECHO_BUFFER_LENGTH_DEFAULT,	//default
-	//(I2S_AUDIOFREQ * 3 / 2),	//best one
-	(I2S_AUDIOFREQ * 4 / 3),	//
-	(13000),					//as in Dekrispator
+	ECHO_BUFFER_LENGTH_DEFAULT,	//default, same as (I2S_AUDIOFREQ * 3 / 2)
 	(I2S_AUDIOFREQ),			//one second
-	//(I2S_AUDIOFREQ * 2), 		//interesting
-	//(I2S_AUDIOFREQ * 5 / 2),	//not bad either
 	(I2S_AUDIOFREQ / 3 * 2),	//short delay
 	(I2S_AUDIOFREQ / 2),		//short delay
 	(I2S_AUDIOFREQ / 3),		//short delay
 	(I2S_AUDIOFREQ / 4),		//short delay
 	(I2S_AUDIOFREQ / 6),		//short delay
 	(I2S_AUDIOFREQ / 8),		//short delay
-	(I2S_AUDIOFREQ / 10),		//short delay
+	(I2S_AUDIOFREQ / 16),		//short delay
+	(I2S_AUDIOFREQ / 32),		//short delay
+	(I2S_AUDIOFREQ / 64),		//short delay
+	(I2S_AUDIOFREQ * 4 / 3),	//
+	(I2S_AUDIOFREQ * 5 / 4),	//
+	(13000),					//as in Dekrispator
+	//(I2S_AUDIOFREQ * 2), 		//interesting
+	//(I2S_AUDIOFREQ * 5 / 2),	//not bad either
 	0							//delay off
 };
 
-//#define ECHO_BUFFER_LENGTH ((int)(I2S_AUDIOFREQ * 1.23456789f)) //-> nonsense
-//#define ECHO_BUFFER_LENGTH ((int)(I2S_AUDIOFREQ * 2.54321f)) //-> max fitting to ram
-//#define ECHO_BUFFER_LENGTH (I2S_AUDIOFREQ * 9 / 4) //-> hard to follow
-//#define ECHO_BUFFER_LENGTH (I2S_AUDIOFREQ * 4 / 3) //-> not too interesting
-
 int fixed_arp_level = 0;
 
-int16_t reverb_buffer[REVERB_BUFFER_LENGTH];	//the buffer is allocated statically
+//int16_t reverb_buffer[REVERB_BUFFER_LENGTH];	//the buffer is allocated statically
+int16_t *reverb_buffer; //the buffer is allocated dynamically
 int reverb_buffer_ptr0, reverb_buffer_ptr;		//pointers for reverb buffer
 int reverb_dynamic_loop_length;
 float REVERB_MIXING_GAIN_MUL, REVERB_MIXING_GAIN_DIV;
@@ -88,6 +86,9 @@ float reverb_mix_f;
 
 float SAMPLE_VOLUME = SAMPLE_VOLUME_DEFAULT; //9.0f; //12.0f; //0.375f;
 float limiter_coeff = DYNAMIC_LIMITER_COEFF_DEFAULT;
+
+float ADC_LPF_ALPHA = 0.2f; //up to 1.0 for max feedback = no filtering
+float ADC_HPF_ALPHA = 0.2f;
 
 //---------------------------------------------------------------------------
 
@@ -101,7 +102,7 @@ void reset_pseudo_random_seed()
 
 void set_pseudo_random_seed(double new_value)
 {
-	printf("set_pseudo_random_seed(%f)\n",new_value);
+	//printf("set_pseudo_random_seed(%f)\n",new_value);
 	b_noise = new_value;
 }
 
@@ -251,6 +252,7 @@ int16_t add_reverb(int16_t sample)
 	//reverb_mix_f = ((float)sample_i16 * REVERB_MIXING_GAIN_MUL / REVERB_MIXING_GAIN_DIV);
 	//reverb_mix_f *= REVERB_MIXING_GAIN_MUL / REVERB_MIXING_GAIN_DIV;
 	//reverb_buffer[reverb_buffer_ptr0] = (int16_t)reverb_mix_f;
+
 	reverb_buffer[reverb_buffer_ptr0] = sample;
 
 	return sample;
@@ -258,11 +260,6 @@ int16_t add_reverb(int16_t sample)
 
 int16_t add_echo(int16_t sample)
 {
-//	if(!PROG_add_echo)
-//	{
-//		return sample;
-//	}
-
 	if(echo_dynamic_loop_length)
 	{
 		//wrap the echo loop
@@ -306,25 +303,73 @@ int16_t add_echo(int16_t sample)
 		limiter_coeff *= DYNAMIC_LIMITER_COEFF_MUL;
 	}
 
-	/*
-	if (echo_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER)
-	{
-		echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER;
-	}
-
-	if (echo_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER)
-	{
-		echo_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER;
-	}
-	*/
 	sample = (int16_t)echo_mix_f;
 
 	//store result to echo, the amount defined by a fragment
 	//echo_mix_f = ((float)sample_i16 * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV);
 	//echo_mix_f *= ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
 	//echo_buffer[echo_buffer_ptr0] = (int16_t)echo_mix_f;
+
 	echo_buffer[echo_buffer_ptr0] = sample;
 
 	return sample;
 }
 
+int16_t reversible_echo(int16_t sample, int direction)
+{
+	if(echo_dynamic_loop_length)
+	{
+		//wrap the echo loop
+		if(direction)
+		{
+			echo_buffer_ptr0++;
+			if (echo_buffer_ptr0 >= echo_dynamic_loop_length)
+			{
+				echo_buffer_ptr0 = 0;
+			}
+
+			echo_buffer_ptr = echo_buffer_ptr0 + 1;
+			if (echo_buffer_ptr >= echo_dynamic_loop_length)
+			{
+				echo_buffer_ptr = 0;
+			}
+		}
+		else
+		{
+			if (echo_buffer_ptr0 > 0)
+			{
+				echo_buffer_ptr0--;
+			}
+			else
+			{
+				echo_buffer_ptr0 = echo_dynamic_loop_length;
+			}
+
+			echo_buffer_ptr = echo_buffer_ptr0 - 1;
+			if (echo_buffer_ptr < 0)
+			{
+				echo_buffer_ptr = echo_dynamic_loop_length;
+			}
+		}
+
+		//add echo from the loop
+		echo_mix_f = (float)sample + (float)echo_buffer[echo_buffer_ptr] * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
+	}
+	else
+	{
+		echo_mix_f = (float)sample;
+	}
+
+	echo_mix_f *= limiter_coeff;
+
+	if(echo_mix_f < -DYNAMIC_LIMITER_THRESHOLD_ECHO && limiter_coeff > 0)
+	{
+		limiter_coeff *= DYNAMIC_LIMITER_COEFF_MUL;
+	}
+
+	sample = (int16_t)echo_mix_f;
+
+	echo_buffer[echo_buffer_ptr0] = sample;
+
+	return sample;
+}

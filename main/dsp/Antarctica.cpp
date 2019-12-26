@@ -21,6 +21,8 @@
 #include <hw/ui.h>
 //#include <hw/signals.h>
 //#include <hw/controls.h>
+#include <hw/sdcard.h>
+#include <hw/leds.h>
 #include "Antarctica.h"
 #include "Binaural.h"
 #include "glo_config.h"
@@ -115,7 +117,9 @@ void song_of_wind_and_ice()
 
     a_seconds = 0;
 
+	#ifdef BOARD_WHALE
     BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
+	#endif
 
     float signal_min = 100000, signal_max = -100000;
     float signal_max_limit = 1100;
@@ -179,6 +183,9 @@ void song_of_wind_and_ice()
 
     int iso_program_dir = -1, iso_program_step = 0, iso_program_freq = 0, iso_sample = 0;;
 
+    int options_menu = 0;
+	int options_indicator = 0;
+
     while(!event_next_channel)
     {
 		if (!(a_sampleCounter & 0x00000001)) //right channel
@@ -203,6 +210,7 @@ void song_of_wind_and_ice()
 			}
 
 			i2s_push_sample(I2S_NUM, (char *)&a_sample32, portMAX_DELAY);
+			sd_write_sample(&a_sample32);
 		}
 		else
 		{
@@ -340,6 +348,8 @@ void song_of_wind_and_ice()
 			}
 		}
 
+		ui_command = 0;
+
 		if (a_sampleCounter%(2*I2S_AUDIOFREQ/10)==13) //every 100ms
 		{
 			if(event_channel_options)
@@ -361,38 +371,99 @@ void song_of_wind_and_ice()
 				iso_program_freq = iso_freq_to_sample_timing[(isochronic-1)*2];
 				iso_sample = iso_program_freq;
 			}
-			if(short_press_sequence || short_press_volume_minus || short_press_volume_plus)
+
+			#define ANTARCTICA_UI_CMD_TONE_VOLUME_INCREASE		1
+			#define ANTARCTICA_UI_CMD_TONE_VOLUME_DECREASE		2
+			#define ANTARCTICA_UI_CMD_TONE_LENGTH_INCREASE		3
+			#define ANTARCTICA_UI_CMD_TONE_LENGTH_DECREASE		4
+			//#define ANTARCTICA_UI_CMD_CUTOFF_INCREASE			5
+			//#define ANTARCTICA_UI_CMD_CUTOFF_DECREASE			6
+
+			//map UI commands
+			#ifdef BOARD_WHALE
+			if(short_press_volume_plus) { ui_command = ANTARCTICA_UI_CMD_TONE_VOLUME_INCREASE; short_press_volume_plus = 0; }
+			if(short_press_volume_minus) { ui_command = ANTARCTICA_UI_CMD_TONE_VOLUME_DECREASE; short_press_volume_minus = 0; }
+			if(short_press_sequence==2) { ui_command = ANTARCTICA_UI_CMD_TONE_LENGTH_INCREASE; short_press_sequence = 0; }
+			if(short_press_sequence==-2) { ui_command = ANTARCTICA_UI_CMD_TONE_LENGTH_DECREASE; short_press_sequence = 0; }
+			//if(short_press_sequence==3) { ui_command = ANTARCTICA_UI_CMD_CUTOFF_INCREASE; short_press_sequence = 0; }
+			//if(short_press_sequence==-3) { ui_command = ANTARCTICA_UI_CMD_CUTOFF_DECREASE; short_press_sequence = 0; }
+			#endif
+
+			#ifdef BOARD_GECHO
+
+			if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1 || btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2)
 			{
-				if(short_press_volume_plus && iso_def->TONE_VOLUME < iso_def->TONE_VOLUME_MAX)
+				//flip the flag
+				options_menu = 1 - options_menu;
+				if(!options_menu)
+				{
+					LED_O4_all_OFF();
+					settings_menu_active = 0;
+				}
+				else
+				{
+					settings_menu_active = 1;
+				}
+				btn_event_ext = 0;
+			}
+
+			if(btn_event_ext)
+			{
+				printf("btn_event_ext=%d, options_menu=%d\n",btn_event_ext, options_menu);
+			}
+
+			if(options_menu)
+			{
+				options_indicator++;
+				LED_O4_set_byte(0x0f*(options_indicator%2));
+
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = ANTARCTICA_UI_CMD_TONE_VOLUME_DECREASE; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = ANTARCTICA_UI_CMD_TONE_VOLUME_INCREASE; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_3) { ui_command = ANTARCTICA_UI_CMD_TONE_LENGTH_DECREASE; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_4) { ui_command = ANTARCTICA_UI_CMD_TONE_LENGTH_INCREASE; btn_event_ext = 0; }
+
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_3) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_4) {  }
+			}
+			else
+			{
+
+			}
+
+			btn_event_ext = 0;
+			#endif
+
+			if(ui_command)
+			{
+				if(ui_command==ANTARCTICA_UI_CMD_TONE_VOLUME_INCREASE && iso_def->TONE_VOLUME < iso_def->TONE_VOLUME_MAX)
 				{
 					iso_def->TONE_VOLUME += iso_def->TONE_VOLUME_STEP;
 				}
-				if(short_press_volume_minus && iso_def->TONE_VOLUME > iso_def->TONE_VOLUME_STEP)
+				if(ui_command==ANTARCTICA_UI_CMD_TONE_VOLUME_DECREASE && iso_def->TONE_VOLUME > iso_def->TONE_VOLUME_STEP)
 				{
 					iso_def->TONE_VOLUME -= iso_def->TONE_VOLUME_STEP;
 				}
-				if(short_press_sequence==2 && iso_def->TONE_LENGTH < iso_def->TONE_LENGTH_MAX)
+				if(ui_command==ANTARCTICA_UI_CMD_TONE_LENGTH_INCREASE && iso_def->TONE_LENGTH < iso_def->TONE_LENGTH_MAX)
 				{
 					iso_def->TONE_LENGTH += iso_def->TONE_LENGTH_STEP;
 				}
-				if(short_press_sequence==-2 && iso_def->TONE_LENGTH > iso_def->TONE_LENGTH_STEP)
+				if(ui_command==ANTARCTICA_UI_CMD_TONE_LENGTH_DECREASE && iso_def->TONE_LENGTH > iso_def->TONE_LENGTH_STEP)
 				{
 					iso_def->TONE_LENGTH -= iso_def->TONE_LENGTH_STEP;
 				}
 				/*
-				if(short_press_sequence==3 && iso_def->TONE_CUTOFF < iso_def->TONE_CUTOFF_MAX)
+				if(ui_command==ANTARCTICA_UI_CMD_CUTOFF_INCREASE && iso_def->TONE_CUTOFF < iso_def->TONE_CUTOFF_MAX)
 				{
 					iso_def->TONE_CUTOFF += iso_def->TONE_CUTOFF_STEP;
 				}
-				if(short_press_sequence==-3 && iso_def->TONE_CUTOFF > iso_def->TONE_CUTOFF_STEP)
+				if(ui_command==ANTARCTICA_UI_CMD_CUTOFF_DECREASE && iso_def->TONE_CUTOFF > iso_def->TONE_CUTOFF_STEP)
 				{
 					iso_def->TONE_CUTOFF -= iso_def->TONE_CUTOFF_STEP;
 				}
 				*/
 				printf("TONE_VOLUME=%f, TONE_LENGTH=%d, TONE_CUTOFF=%f\n", iso_def->TONE_VOLUME, iso_def->TONE_LENGTH, iso_def->TONE_CUTOFF);
-				short_press_sequence = 0;
-				short_press_volume_plus = 0;
-				short_press_volume_minus = 0;
 			}
 		}
     }

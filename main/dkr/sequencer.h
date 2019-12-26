@@ -47,6 +47,7 @@
 #define DKR_MAX_SEQUENCE 2000
 
 extern int NUMBER_STEPS, INIT_TEMPO;
+extern uint8_t dkr_midi_override;
 
 /*------------------------------------------------------------------------------*/
 typedef struct

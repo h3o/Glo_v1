@@ -27,11 +27,20 @@
 #include "sequencer.h"
 #include <stdio.h>
 #include "glo_config.h"
+#include "hw/midi.h"
+#include "hw/leds.h"
 
 int NUMBER_STEPS = DKR_NUMBER_STEPS_DEFAULT;
 int INIT_TEMPO = DKR_INIT_TEMPO_DEFAULT;
 
-int seq_filled = 0;
+uint8_t seq_filled = 0;
+uint8_t	dkr_midi_override = 0;
+
+extern /*static*/ float		f0;// _CCM_ ;
+extern /*static*/ float 	vol;// _CCM_;
+extern /*static*/ bool 		autoFilterON;// _CCM_;
+extern ADSR_t				adsr;// _CCM_;
+extern ResonantFilter 		SVFilter;// _CCM_ ;
 
 /*--------------------------------------------------------------------------------------------*/
 Sequencer_t 		seq _CCM_;
@@ -398,20 +407,58 @@ void sequencer_init(void)
 /*--------------------------------------------------------------------------------------------*/
 void sequencer_process(void) // To be called at each sample treatment
 {
-	/* If we have reached a new step ....  */
-	if (seq.smp_count-- <= 0)
+	if(!dkr_midi_override)
 	{
-		/* If we are at the begining of a new sequence .... */
-		if (seq.step_idx == 0)
+		if(MIDI_keys_pressed)
 		{
-			//sequencer_newSequence_action();
+			printf("MIDI active, will receive chords\n");
+			dkr_midi_override = 1;
 		}
-		sequencer_newStep_action();
+		else
+		{
+			/* If we have reached a new step ....  */
+			if (seq.smp_count-- <= 0)
+			{
+				/* If we are at the begining of a new sequence .... */
+				if (seq.step_idx == 0)
+				{
+					//sequencer_newSequence_action();
+				}
+				sequencer_newStep_action();
 
-		seq.smp_count = seq.steptime; // reload the counter
-		seq.step_idx++;
-		if(seq.step_idx >= NUMBER_STEPS) seq.step_idx = 0;
+				seq.smp_count = seq.steptime; // reload the counter
+				seq.step_idx++;
+				if(seq.step_idx >= NUMBER_STEPS) seq.step_idx = 0;
+			}
+		}
+	}
+	else
+	{
+		if(MIDI_notes_updated)
+		{
+			printf("MIDI_notes_updated\n");
+			MIDI_notes_updated = 0;
 
+			LED_W8_all_OFF();
+			LED_B5_all_OFF();
+
+			if(MIDI_keys_pressed)
+			{
+				printf("MIDI keys pressed, ADSR key On;\n");
+				MIDI_to_LED(MIDI_last_chord[0], 1);
+				ADSR_keyOn(&adsr);
+
+				f0 = notesFreq[MIDI_last_chord[0]];
+				vol = frand_a_b(0.4f , .8f); // slightly random volume for each note
+
+				//if (autoFilterON) SVF_directSetFilterValue(&SVFilter, Ts * 600.f * powf(5000.f / 600.f, frand_a_b(0 , 1)));
+			}
+			else
+			{
+				printf("no MIDI keys pressed, ADSR key Off;\n");
+				ADSR_keyOff(&adsr);
+			}
+		}
 	}
 }
 /*--------------------------------------------------------------------------------------------*/

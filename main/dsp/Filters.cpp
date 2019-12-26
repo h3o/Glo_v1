@@ -52,11 +52,15 @@ Filters::Filters(int song_id, float default_resonance)
 
 Filters::~Filters(void)
 {
+	//printf("~Filters()\n");
+
 	//delete(iir2);
 	for(int i=0;i<FILTERS;i++)
 	{
+		//printf("delete(iir2[i=%d]\n",i);
 		delete(iir2[i]);
 	}
+	//printf("delete(chord=0x%lx)\n",(unsigned long)chord);
 	delete(chord);
 }
 
@@ -67,6 +71,8 @@ void Filters::setup() //with no parameters will set up to default mode (Low-pass
 
 void Filters::setup(int filters_type_and_order)
 {
+	fp.filters_type = filters_type_and_order;
+
 	//if(iir2!=NULL) //in case we are resetting all filters
 	//{
 	//	printf("freeing iir2...\n");
@@ -182,6 +188,13 @@ void filters::start_update_filters(int f1, int f2, int f3, int f4, float freq1, 
 
 void Filters::start_update_filters_pairs(int *filter_n, float *freq, int filters_to_update)
 {
+	if(update_filters_loop!=0)
+	{
+		//problem - has not finished with previous update (possibly a melody)
+		//update_filters_loop = 0;
+		printf("puf![%d] ",update_filters_loop);
+	}
+
 	for(int i=0;i<filters_to_update;i++)
 	{
 		update_filters_f[i] = filter_n[i];
@@ -192,13 +205,101 @@ void Filters::start_update_filters_pairs(int *filter_n, float *freq, int filters
 	update_filters_loop = filters_to_update * 2;
 }
 
-void Filters::start_next_chord(int skip_voices)
+void Filters::start_next_chord_MIDI(int skip_voices, uint8_t *MIDI_chord)
 {
 	if(update_filters_loop!=0)
 	{
 		//problem - has not finished with previous update (possibly a melody)
 		//update_filters_loop = update_filters_loop;
+		update_filters_loop = 0;
+		//printf("puf! ");
 	}
+
+	float freq;
+
+	for(int i=skip_voices;i<CHORD_MAX_VOICES;i++)
+	{
+		if(MIDI_notes_updated) //if another update came in meanwhile, abort this one
+		{
+			return;
+		}
+
+		if(i == fp.melody_filter_pair)
+		{
+			//nothing to update, skip this voice
+		}
+		else
+		{
+			#ifdef MIDI_4_KEYS_POLYPHONY
+			if(MIDI_last_chord[3])
+			{
+				freq = MIDI_note_to_freq(MIDI_last_chord[chord->expand_multipliers4[i][0]]);
+
+				if(freq==0)
+				{
+					chord->midi_chords_expanded[i] = 10.0f; //low enough to count as note off
+				}
+				else
+				{
+					if(chord->expand_multipliers4[i][1] > 0)
+					{
+						chord->midi_chords_expanded[i] = freq * (float)chord->expand_multipliers4[i][1];
+					}
+					else
+					{
+						chord->midi_chords_expanded[i] = freq / (float)(-chord->expand_multipliers4[i][1]);
+					}
+				}
+			}
+			else
+			{
+			#endif
+				freq = MIDI_note_to_freq(MIDI_last_chord[chord->expand_multipliers[i][0]]);
+
+				if(freq==0)
+				{
+					chord->midi_chords_expanded[i] = 10.0f; //low enough to count as note off
+				}
+				else
+				{
+					if(chord->expand_multipliers[i][1] > 0)
+					{
+						//freq = bases_parsed[3*c + expand_multipliers[t][0]] * (float)expand_multipliers[t][1];
+						chord->midi_chords_expanded[i] = freq * (float)chord->expand_multipliers[i][1];
+					}
+					else
+					{
+						//chords[c].freqs[t] = bases_parsed[3*c + expand_multipliers[t][0]] / (float)(-expand_multipliers[t][1]);
+						chord->midi_chords_expanded[i] = freq / (float)(-chord->expand_multipliers[i][1]);
+					}
+				}
+			#ifdef MIDI_4_KEYS_POLYPHONY
+			}
+			#endif
+
+			//printf("midi exp note %d = %f\n", i, chord->midi_chords_expanded[i]);
+
+			update_filters_f[update_filters_loop] = i;
+			update_filters_freq[update_filters_loop] = chord->midi_chords_expanded[i]*fp.tuning_chords_l/440.0f;
+			update_filters_loop++;
+
+			update_filters_f[update_filters_loop] = CHORD_MAX_VOICES + i;
+			update_filters_freq[update_filters_loop] = chord->midi_chords_expanded[i]*fp.tuning_chords_r/440.0f;
+			update_filters_loop++;
+		}
+	}
+}
+
+void Filters::start_next_chord(int skip_voices)
+{
+	/*
+	if(update_filters_loop!=0)
+	{
+		//problem - has not finished with previous update (possibly a melody)
+		//update_filters_loop = update_filters_loop;
+		printf("puf! ");
+	}
+	*/
 	for(int i=skip_voices;i<CHORD_MAX_VOICES;i++)
 	{
 		if(i == fp.melody_filter_pair)
@@ -219,7 +320,7 @@ void Filters::start_next_chord(int skip_voices)
 
 	//update_filters_loop = CHORD_MAX_VOICES * 2;
 
-	if(use_midi)
+    if(midi_sync_mode==MIDI_SYNC_MODE_MIDI_IN_OUT || MIDI_SYNC_MODE_MIDI_OUT || MIDI_SYNC_MODE_MIDI_CLOCK_OUT)
 	{
 		send_MIDI_notes(chord->midi_notes, chord->current_chord, MIDI_CHORD_NOTES);
 	}
@@ -365,7 +466,7 @@ void Filters::set_melody_voice(int filter_pair, int melody_id)
 
 		chord->melody_freqs_parsed = (float*)malloc(chord->total_melody_notes * sizeof(float));
 		//printf("set_melody_voice(): memory allocated for [melody_freqs_parsed] at %x\n", (unsigned int)chord->melody_freqs_parsed);
-		chord->melody_indicator_leds = (uint8_t*)malloc(chord->total_melody_notes * sizeof(uint8_t));
+		chord->melody_indicator_leds = (int8_t*)malloc(chord->total_melody_notes * sizeof(int8_t));
 		//printf("set_melody_voice(): memory allocated for [melody_indicator_leds] at %x\n", (unsigned int)chord->melody_indicator_leds);
 
 		//printf("set_melody_voice(): parsing notes\n");

@@ -56,8 +56,10 @@ void channel_chopper()
 	channel_running = 1;
     volume_ramp = 1;
 
+	#ifdef BOARD_WHALE
     RGB_LED_G_ON;
     RGB_LED_B_ON;
+	#endif
 
 	while(!event_next_channel)
 	{
@@ -65,7 +67,7 @@ void channel_chopper()
 
 		chopperCounter++;
 
-		t_TIMING_BY_SAMPLE_EVERY_250_MS = TIMING_BY_SAMPLE_EVERY_250_MS;
+		t_TIMING_BY_SAMPLE_EVERY_250_MS = TIMING_EVERY_250_MS;
 
 		if(chopperCounter==chopperTimer)
 		{
@@ -81,13 +83,13 @@ void channel_chopper()
 		}
 
 		//here actually two seconds as one increment of sampleCounter happens once per both channels
-		if (TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION) //one full second passed
+		if (TIMING_BY_SAMPLE_1_SEC) //one full second passed
 		{
 			seconds++;
 			sampleCounter = 0;
 		}
 
-		if (TIMING_BY_SAMPLE_EVERY_100_MS == 43) //10Hz
+		if (TIMING_EVERY_100_MS == 43) //10Hz
 		{
 			//x-axis sets chopper timing
 
@@ -171,12 +173,12 @@ void channel_chopper()
 			echo_dynamic_loop_length0 = echo_dynamic_loop_length;
 		}
 
-		if (TIMING_BY_SAMPLE_EVERY_10_MS == 33) //100Hz
+		if (TIMING_EVERY_20_MS == 33) //50Hz
 		{
 			if(limiter_coeff < DYNAMIC_LIMITER_COEFF_DEFAULT)
 			{
 				//limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @20Hz, limiter will fully recover within 1 second
-				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @ 100Hz, limiter will fully recover within 0.2 second
+				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @ 50Hz, limiter will fully recover within 0.4 second
 			}
 		}
 
@@ -192,10 +194,10 @@ void channel_chopper()
 		//sample_mix = 0;
 		sample_mix = (int16_t)ADC_sample;
 
-		if (TIMING_BY_SAMPLE_EVERY_100_MS == 45) //10Hz
-		{
+		//if (TIMING_EVERY_100_MS == 45) //10Hz
+		//{
 
-		}
+		//}
 
 		sample_mix = sample_mix /* * SAMPLE_VOLUME / 12.0f*/ * chopperEnv1; //apply volume
 
@@ -217,7 +219,7 @@ void channel_chopper()
         sample32 += (int16_t)(sample_mix);
 		#endif
 
-
+		#ifdef BOARD_WHALE
 		if(sampleCounter & (1<<add_beep))
 		{
 			if(add_beep)
@@ -225,7 +227,7 @@ void channel_chopper()
 				sample32 += (100 + (100<<16));
 			}
 		}
-
+		#endif
 
         //sample32 = 0; //ADC_sample; //test bypass all effects
         i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);

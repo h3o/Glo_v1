@@ -17,6 +17,7 @@
 #include <DrumKit.h>
 #include <Accelerometer.h>
 #include <InitChannels.h>
+#include <hw/leds.h>
 
 #define DRUM_KIT_ECHO
 
@@ -32,11 +33,32 @@ int drum_condition(int drum_no, int direction)
 {
 	//printf("drum_condition(%d, %d): acc_res[0] = %f, acc_res[2] = %f\n", drum_no, direction, acc_res[0], acc_res[2]);
 
+	#ifdef BOARD_WHALE
 	//here is defined which drum is where
 	if(drum_no==0) { if(direction) { return acc_res[0] < -DRUM_THRESHOLD_ON; } else { return acc_res[0] > -DRUM_THRESHOLD_OFF; } }
 	if(drum_no==3) { if(direction) { return acc_res[0] >  DRUM_THRESHOLD_ON; } else { return acc_res[0] <  DRUM_THRESHOLD_OFF; } }
 	if(drum_no==2) { if(direction) { return acc_res[2] < -DRUM_THRESHOLD_ON; } else { return acc_res[2] > -DRUM_THRESHOLD_OFF; } }
 	if(drum_no==1) { if(direction) { return acc_res[2] >  DRUM_THRESHOLD_ON; } else { return acc_res[2] <  DRUM_THRESHOLD_OFF; } }
+	#endif
+
+	#ifdef BOARD_GECHO
+	if(use_acc_or_ir_sensors==PARAMETER_CONTROL_SENSORS_ACCELEROMETER)
+	{
+		if(drum_no==0) { if(direction) { return acc_res[0] < -DRUM_THRESHOLD_ON; } else { return acc_res[0] > -DRUM_THRESHOLD_OFF; } }
+		if(drum_no==3) { if(direction) { return acc_res[0] >  DRUM_THRESHOLD_ON; } else { return acc_res[0] <  DRUM_THRESHOLD_OFF; } }
+		if(drum_no==2) { if(direction) { return acc_res[1] < -DRUM_THRESHOLD_ON; } else { return acc_res[1] > -DRUM_THRESHOLD_OFF; } }
+		if(drum_no==1) { if(direction) { return acc_res[1] >  DRUM_THRESHOLD_ON; } else { return acc_res[1] <  DRUM_THRESHOLD_OFF; } }
+	}
+	else
+	{
+		if(drum_no==0) { if(direction) { return SENSOR_THRESHOLD_RED_5; } else { return !SENSOR_THRESHOLD_RED_3; } }
+		if(drum_no==3) { if(direction) { return SENSOR_THRESHOLD_ORANGE_3; } else { return !SENSOR_THRESHOLD_ORANGE_1; } }
+		if(drum_no==2) { if(direction) { return SENSOR_THRESHOLD_BLUE_3; } else { return !SENSOR_THRESHOLD_BLUE_5; } }
+		if(drum_no==1) { if(direction) { return SENSOR_THRESHOLD_WHITE_4; } else { return !SENSOR_THRESHOLD_WHITE_6; } }
+	}
+
+	#endif
+
 	return 0;
 }
 
@@ -48,7 +70,7 @@ void channel_drum_kit()
 	DRUM_THRESHOLD_ON = global_settings.DRUM_THRESHOLD_ON;
 	DRUM_THRESHOLD_OFF = global_settings.DRUM_THRESHOLD_OFF;
 
-	uint16_t t_TIMING_BY_SAMPLE_EVERY_250_MS; //optimization of timing counters
+	//uint16_t t_TIMING_BY_SAMPLE_EVERY_250_MS; //optimization of timing counters
 
 	//there is an external sampleCounter variable already, it will be used to timing and counting seconds
 	sampleCounter = 0;
@@ -154,17 +176,17 @@ void channel_drum_kit()
 
 		//sample_f[0] = sample_f[1];
 
-		t_TIMING_BY_SAMPLE_EVERY_250_MS = TIMING_BY_SAMPLE_EVERY_250_MS;
+		//t_TIMING_BY_SAMPLE_EVERY_250_MS = TIMING_EVERY_250_MS;
 
 		//here actually two seconds as one increment of sampleCounter happens once per both channels
-		if (TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION) //one full second passed
+		if (TIMING_BY_SAMPLE_1_SEC) //one full second passed
 		{
 			//printf("TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION\n");
 			seconds++;
 			sampleCounter = 0;
 		}
 
-		if (TIMING_BY_SAMPLE_EVERY_2_MS == 13)
+		if (TIMING_EVERY_4_MS == 13)
 		{
 			for (int i=0;i<DRUM_CHANNELS_MAX;i++)
 			{
@@ -279,7 +301,7 @@ void channel_drum_kit()
 		}
 */
 
-
+/*
 		if(short_press_volume_plus)
 		{
 			short_press_volume_plus = 0;
@@ -288,6 +310,7 @@ void channel_drum_kit()
 		{
 			short_press_volume_minus = 0;
 		}
+*/
 		if(event_channel_options)
 		{
 			echo_dynamic_loop_current_step++;
@@ -366,6 +389,7 @@ void channel_drum_kit()
         sample32 += (int16_t)(sample_mix);
 		#endif
 
+		#ifdef BOARD_WHALE
 		if(sampleCounter & (1<<add_beep))
 		{
 			if(add_beep)
@@ -373,6 +397,7 @@ void channel_drum_kit()
 				sample32 += (100 + (100<<16));
 			}
 		}
+		#endif
 
         //sample32 = 0; //ADC_sample; //test bypass all effects
         i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);

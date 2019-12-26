@@ -35,6 +35,8 @@
 #include <hw/signals.h>
 #include <hw/ui.h>
 #include <hw/midi.h>
+#include <hw/sdcard.h>
+#include <hw/leds.h>
 
 /*-------------------------------------------------------*/
 
@@ -71,14 +73,14 @@ extern float			dk_filterFreq2  ;
 
 extern ADSR_t 			adsr;
 
-static bool 		autoFilterON _CCM_;
+/*static*/ bool 		autoFilterON _CCM_;
 static bool			delayON _CCM_;
 static bool			phaserON _CCM_;
 static bool 		chorusON _CCM_;
 static int8_t		autoSound _CCM_;
 
-static float			f0 _CCM_ ;
-static float 			vol  _CCM_;
+/*static*/ float			f0 _CCM_ ;
+/*static*/ float 			vol  _CCM_;
 static float			env  _CCM_;
 static enum timbre 		sound _CCM_;
 
@@ -492,9 +494,15 @@ void sequencer_newStep_action(void) // User callback function called by sequence
 	}
 
 	if ( (noteG.someNotesMuted) && (rintf(frand_a_b(0.4f , 1)) == 0) )
+	{
 		ADSR_keyOff(&adsr);
+		printf("sequencer_newStep_action(): ADSR_keyOff\n");
+	}
 	else
+	{
 		ADSR_keyOn(&adsr);
+		printf("sequencer_newStep_action(): ADSR_keyOn\n");
+	}
 
 	if (autoFilterON)
 		SVF_directSetFilterValue(&SVFilter, Ts * 600.f * powf(5000.f / 600.f, frand_a_b(0 , 1)));
@@ -572,8 +580,8 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 
 	int current_patch = 0;
 	//int options = 6;			//default: envelope + filters
-	int options = 3;			//default: echo + envelope
-	#define MAX_OPTIONS 8
+	int fx_options = 3;			//default: echo + envelope
+	#define FX_MAX_OPTIONS 8
 
 	int enable_echo = 1;		//bit weight: 1
 	int enable_envelope = 1;	//bit weight: 2
@@ -581,6 +589,9 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 
 	int dekrispator_sequence = 0;
 	extern int seq_filled;
+
+	int options_menu = 0;
+	int options_indicator = 0;
 
 	//initial indication
 	#ifdef BOARD_WHALE
@@ -620,7 +631,11 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 
 			y *= vol * env; // apply volume and envelop
 
-			if (adsr.cnt_ >= seq.gateTime) ADSR_keyOff(&adsr);
+			//automatic note off, only if not overriden by MIDI
+			if(!dkr_midi_override)
+			{
+				if (adsr.cnt_ >= seq.gateTime) ADSR_keyOff(&adsr);
+			}
 		}
 		else
 		{
@@ -697,14 +712,92 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 */
 		#ifdef USE_FAUX_LOW_SAMPLE_RATE
 		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		sd_write_sample(&sample32);
 		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
 		#endif
 		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		sd_write_sample(&sample32);
 		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
 
 		sampleCounter++;
 
-		if(short_press_volume_plus)
+		ui_command = 0;
+
+		#define DKR_UI_CMD_NEXT_PATCH		1
+		#define DKR_UI_CMD_PREV_PATCH		2
+		#define DKR_UI_CMD_LOAD_SEQ			3
+		#define DKR_UI_CMD_LOAD_PATCH_NVS	4
+		#define DKR_UI_CMD_GEN_PATCH		5
+		#define DKR_UI_CMD_GEN_FX			6
+		#define DKR_FX_OPTIONS_CHANGE		7
+
+		if (TIMING_EVERY_20_MS == 31) //50Hz
+		{
+			//map UI commands
+			#ifdef BOARD_WHALE
+			if(short_press_volume_plus) { ui_command = DKR_UI_CMD_NEXT_PATCH; short_press_volume_plus = 0; }
+			if(short_press_volume_minus) { ui_command = DKR_UI_CMD_PREV_PATCH; short_press_volume_minus = 0; }
+			if(short_press_sequence==2) { ui_command = DKR_UI_CMD_LOAD_SEQ; short_press_sequence = 0; }
+			if(short_press_sequence==-2) { ui_command = DKR_UI_CMD_LOAD_PATCH_NVS; short_press_sequence = 0; }
+			if(short_press_sequence==3) { ui_command = DKR_UI_CMD_GEN_PATCH; short_press_sequence = 0; }
+			if(short_press_sequence==-3) { ui_command = DKR_UI_CMD_GEN_FX; short_press_sequence = 0; }
+			if(event_channel_options) { ui_command = DKR_FX_OPTIONS_CHANGE; event_channel_options = 0;
+			#endif
+
+			#ifdef BOARD_GECHO
+
+			if(event_channel_options)
+			{
+				//flip the flag
+				options_menu = 1 - options_menu;
+				if(!options_menu)
+				{
+					LED_O4_all_OFF();
+					//ui_ignore_events = 0;
+					settings_menu_active = 0;
+				}
+				else
+				{
+					//ui_ignore_events = 1;
+					settings_menu_active = 1;
+				}
+				event_channel_options = 0;
+			}
+
+			if(btn_event_ext)
+			{
+				printf("btn_event_ext=%d, options_menu=%d\n",btn_event_ext, options_menu);
+			}
+
+			if(options_menu)
+			{
+				options_indicator++;
+				LED_O4_set_byte(0x0f*(options_indicator%2));
+
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = DKR_UI_CMD_GEN_FX; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = DKR_UI_CMD_GEN_PATCH; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_3) { ui_command = DKR_FX_OPTIONS_CHANGE; btn_event_ext = 0; }
+				//if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_4) { }
+
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_3) {  }
+				//if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_4) {  }
+			}
+			else
+			{
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = DKR_UI_CMD_PREV_PATCH; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = DKR_UI_CMD_NEXT_PATCH; btn_event_ext = 0; }
+
+				if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_1) { ui_command = DKR_UI_CMD_LOAD_PATCH_NVS; btn_event_ext = 0; }
+				if(btn_event_ext==BUTTON_EVENT_RST_PLUS+BUTTON_2) { ui_command = DKR_UI_CMD_LOAD_SEQ; btn_event_ext = 0; }
+			}
+
+			btn_event_ext = 0;
+			#endif
+		}
+
+		if(ui_command==DKR_UI_CMD_NEXT_PATCH)
 		{
 			#ifdef RANDOM_PATCHES
 			MagicPatch(MIDI_MAXi);
@@ -720,10 +813,8 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 			MagicPatch(current_patch); //patches are numbered from 1
 			MagicFX(current_patch);
 			#endif
-
-			short_press_volume_plus = 0;
 		}
-		if(short_press_volume_minus)
+		if(ui_command==DKR_UI_CMD_PREV_PATCH)
 		{
 			#ifdef RANDOM_PATCHES
 			MagicFX(MIDI_MAXi);
@@ -739,35 +830,32 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 			MagicPatch(current_patch); //patches are numbered from 1
 			MagicFX(current_patch);
 			#endif
-
-			short_press_volume_minus = 0;
 		}
-		if(event_channel_options)
+		if(ui_command==DKR_FX_OPTIONS_CHANGE)
 		{
 			//cycle through some options
-			options++;
-			if(options==MAX_OPTIONS)
+			fx_options++;
+			if(fx_options==FX_MAX_OPTIONS)
 			{
-				options = 0;
+				fx_options = 0;
 			}
 
+			LED_R8_set_byte((fx_options&1?0x03:0)+(fx_options&2?0x18:0)+(fx_options&4?0xc0:0));
+
 			//enable_echo = 1 - enable_echo;
-			enable_echo = options % 2;
-			enable_envelope = (options / 2) % 2;
-			enable_filters = (options / 4) % 2;
-			printf("dekrispator_make_sound(): options set, echo = %d, envelope = %d, filters = %d\n", enable_echo, enable_envelope, enable_filters);
+			enable_echo = fx_options % 2;
+			enable_envelope = (fx_options / 2) % 2;
+			enable_filters = (fx_options / 4) % 2;
+			printf("dekrispator_make_sound(): fx_options set, echo = %d, envelope = %d, filters = %d\n", enable_echo, enable_envelope, enable_filters);
 
 			#ifdef BOARD_WHALE
 			if(enable_echo)		{ RGB_LED_R_ON; } else { RGB_LED_R_OFF; }
 			if(enable_envelope)	{ RGB_LED_G_ON; } else { RGB_LED_G_OFF; }
 			if(enable_filters)	{ RGB_LED_B_ON; } else { RGB_LED_B_OFF; }
 			#endif
-
-			event_channel_options = 0;
 		}
-		if(short_press_sequence==2)
+		if(ui_command==DKR_UI_CMD_LOAD_SEQ)
 		{
-			short_press_sequence = 0;
 			dekrispator_sequence++;
 			NUMBER_STEPS = load_dekrispator_sequence(dekrispator_sequence, seq.track1.note, &INIT_TEMPO);
 			if(NUMBER_STEPS)
@@ -785,23 +873,20 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 
 			sequencer_init();
 		}
-		if(short_press_sequence==-2)
+		if(ui_command==DKR_UI_CMD_LOAD_PATCH_NVS)
 		{
-			short_press_sequence = 0;
 			load_dekrispator_patch_nvs(dkr_patch);
 			MagicPatch(MIDI_MAXi+2);
 			MagicFX(MIDI_MAXi+2);
 		}
-		if(short_press_sequence==3)
+		if(ui_command==DKR_UI_CMD_GEN_PATCH)
 		{
-			short_press_sequence = 0;
 			MagicPatch(MIDI_MAXi);
 			printf("dekrispator_make_sound(): new random MagicPatch loaded\n");
 			dekrispator_patch_store_timeout = DEKRISPATOR_PATCH_STORE_TIMEOUT;
 		}
-		if(short_press_sequence==-3)
+		if(ui_command==DKR_UI_CMD_GEN_FX)
 		{
-			short_press_sequence = 0;
 			MagicFX(MIDI_MAXi);
 			printf("dekrispator_make_sound(): new random MagicFX loaded\n");
 			dekrispator_patch_store_timeout = DEKRISPATOR_PATCH_STORE_TIMEOUT;
@@ -815,12 +900,11 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 				store_dekrispator_patch_nvs(dkr_patch);
 			}
 		}
-		if (TIMING_BY_SAMPLE_EVERY_10_MS == 33) //100Hz
+		if (TIMING_EVERY_20_MS == 33) //50Hz
 		{
 			if(limiter_coeff < DYNAMIC_LIMITER_COEFF_DEFAULT)
 			{
-				//limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @20Hz, limiter will fully recover within 1 second
-				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //timing @ 100Hz, limiter will fully recover within 0.2 second
+				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //limiter will fully recover within 0.4 second
 			}
 		}
 	}

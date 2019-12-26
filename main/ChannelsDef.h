@@ -22,6 +22,7 @@ void channel_high_pass_high_reso(int song, int melody, int sample);
 void channel_low_pass(int song, int melody);
 void channel_low_pass_high_reso(int song, int melody, int sample);
 void channel_direct_waves(int use_reverb);
+void channel_white_noise();
 void channel_antarctica();
 void channel_dco();
 void channel_granular();

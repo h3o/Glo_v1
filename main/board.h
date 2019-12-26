@@ -14,14 +14,14 @@
  *
  */
 
-#define BOARD_WHALE
+//#define BOARD_WHALE
 
 #ifdef BOARD_WHALE
 #define BOARD_WHALE_ON_EXPANDER_V181
 
 #endif
 
-//#define BOARD_GECHO
+#define BOARD_GECHO
 
 #ifdef BOARD_GECHO
 #define BOARD_GECHO_V173

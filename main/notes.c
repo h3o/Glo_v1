@@ -21,6 +21,8 @@
 #include <ctype.h>
 #include <math.h>
 
+#include "hw/ui.h"
+
 int *set_chords_map = NULL;
 int (*temp_song)[NOTES_PER_CHORD] = NULL;
 
@@ -226,17 +228,26 @@ void set_melody_str(char *melody)
 }
 */
 
-//translate from note number (1=c,2=c#,3=d,...,11=a#,12=b) to LED number (0-7=whites,10-14=blues)
-void notes_to_LEDs(int *notes, int *leds, int notes_per_chord)
+const int8_t LED_translate_table[14] = {-1,0,10,1,11,2,3,12,4,13,5,14,6,7};
+
+//translate from note number (1=c,2=c#,3=d,...,11=a#,12=b,13=c2) to LED number (0-7=whites,10-14=blues)
+void notes_to_LEDs(int *notes, int8_t *leds, int notes_per_chord)
 {
-	const int translate_table[14] = {-1,0,10,1,11,2,3,12,4,13,5,14,6,7};
-	for(int i=0;i<notes_per_chord;i++)
+	int i,nt;
+
+	for(i=0;i<notes_per_chord;i++)
 	{
-		leds[i] = translate_table[notes[i]%100];
+		nt = notes[i]%100;
+		if(nt>13)
+		{
+			nt = 1 + nt % 13;
+		}
+		leds[i] = LED_translate_table[nt];
+		//printf("notes_to_LEDs(): note %d -> LED %d\n", nt, leds[i]);
 	}
 }
 
-int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, uint8_t *led_indicators_buf, uint8_t *midi_notes_buf)
+int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, int8_t *led_indicators_buf, uint8_t *midi_notes_buf)
 {
 	//need to allocate temp buffer, as this function modifies it (and it can be direct mapping to FLASH)
 	char *base_notes_buf = malloc(strlen(base_notes_buf_src)+2);
@@ -275,21 +286,27 @@ int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, uint8_t *led_
 			{
 				halftones++;
 				ptr++;
-
-				//Blue LEDs:
-				if(note == 'c') LED_indicator = 10;
-				else if(note == 'd') LED_indicator = 11;
-				else if(note == 'f') LED_indicator = 12;
-				else if(note == 'g') LED_indicator = 13;
-				else if(note == 'a') LED_indicator = 14;
-				else LED_indicator = -1; //no note
-			}
-			else
-			{
-				//White LEDs:
-				LED_indicator = (6 + note - 'a') % 8; //c->0, a->6
 			}
 			ptr++;
+
+			//get the LED indicator codes
+
+			//halftones contains distance from note a, c=3rd half-tone
+			LED_indicator = LED_translate_table[1+(halftones-3+(int)persistent_settings.TRANSPOSE+120)%12]; //1=c,2=c#...
+			//printf("halftones = %d, LED_indicator = %d\n", halftones, LED_indicator);
+
+			/*
+			//Blue LEDs:
+			if(note == 'c') LED_indicator = 10;
+			else if(note == 'd') LED_indicator = 11;
+			else if(note == 'f') LED_indicator = 12;
+			else if(note == 'g') LED_indicator = 13;
+			else if(note == 'a') LED_indicator = 14;
+			else LED_indicator = -1; //no note
+
+			//White LEDs:
+			LED_indicator = (6 + note - 'a') % 8; //c->0, a->6
+			*/
 
 			//get the octave
 			if(base_notes_buf[ptr] >= '1' && base_notes_buf[ptr] <= '7')
@@ -303,7 +320,7 @@ int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, uint8_t *led_
 			}
 
 			//add halftones... 12 halftones is plus one octave -> frequency * 2
-			note_freq = NOTE_FREQ_A4 * pow(halftone_step_coef, halftones);
+			note_freq = NOTE_FREQ_A4 * pow(halftone_step_coef, halftones + persistent_settings.TRANSPOSE);
 
 			//shift according to the octave
 			octave_shift = octave - 4; //ref note is A4 - fourth octave
@@ -313,7 +330,7 @@ int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, uint8_t *led_
 			}
 
 			//this is the good moment to calculate MIDI note
-			MIDI_note = (octave_shift + 4) * 12 + halftones + 21; //the first piano key A0 = MIDI note 21
+			MIDI_note = (octave_shift + 4) * 12 + halftones + 21 + persistent_settings.TRANSPOSE; //the first piano key A0 = MIDI note 21
 
 			if(octave_shift > 0) //shift up
 			{
@@ -370,4 +387,3 @@ int parse_notes(char *base_notes_buf_src, float *bases_parsed_buf, uint8_t *led_
 
 	return parsed_note;
 }
-

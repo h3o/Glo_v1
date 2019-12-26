@@ -16,10 +16,14 @@
 
 #include "init.h"
 #include "gpio.h"
+#include "leds.h"
 #include "codec.h"
 #include "signals.h"
 #include "i2c_encoder_v2.h"
 #include "sha1.h"
+#include "midi.h"
+#include "glo_config.h"
+#include "ui.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -28,31 +32,39 @@
 #include <sys/time.h>
 
 i2c_port_t i2c_num;
-int i2c_driver_installed = 0;
-int i2c_bus_mutex = 0;
-int glo_run = 0;
+uint8_t i2c_driver_installed = 0;
+uint8_t i2c_bus_mutex = 0;
+uint8_t glo_run = 0;
 
 int channel_loop = 0,channel_loop_remapped;
 
-int channel_running = 0;
-int volume_ramp = 0;
-int beeps_enabled = 1;
+uint8_t channel_running = 0;
+uint8_t volume_ramp = 0;
+uint8_t beeps_enabled = 1;
+uint8_t sd_playback_channel = 0;
 
 uint16_t ms10_counter = 0; //sync counter for various processes (buttons, volume ramps, MCLK off)
-uint16_t auto_power_off;
+uint16_t auto_power_off = 0;
+
+uint8_t channel_uses_codec = 1;
+
+int init_free_mem;
+
+const uint8_t acc_orientation_indication[ACC_ORIENTATION_MODES] = {0x15, 0x6d, 0x6b, 0x5b, 0xee, 0x77};
+const uint8_t acc_invert_indication[ACC_INVERT_MODES] = {0x15, 0x2b, 0x2d, 0x5b, 0x35, 0x6b, 0x6d, 0xdb};
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     return ESP_OK;
 }
 
-void init_i2s_and_gpio(int buf_count, int buf_len)
+void init_i2s_and_gpio(int buf_count, int buf_len, int sample_rate)
 {
 	printf("Initialize I2S\n");
 
 	i2s_config_t i2s_config = {
         .mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX,                    // enable TX and RX
-        .sample_rate = SAMPLE_RATE_DEFAULT,
+        .sample_rate = sample_rate,
         .bits_per_sample = 16,                                                  //16-bit per channel
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,                           //2-channels
         .communication_format = I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB,
@@ -80,15 +92,26 @@ void init_i2s_and_gpio(int buf_count, int buf_len)
     };
     i2s_pin_config_t pin_config = {
 
-        .bck_io_num = 25,			//bit clock
 		#ifdef BOARD_WHALE
+        .bck_io_num = 25,			//bit clock
         .ws_io_num = 12,			//byte clock
         .data_in_num = 27,			//MISO
+        .data_out_num = 26,			//MOSI
 		#else //gecho has different signal used here
+
+		//old wiring, 1.75-1.77 without mod
+		//.bck_io_num = 25,			//bit clock
+		//.ws_io_num = 33,			//byte clock
+        //.data_in_num = 34,			//MISO
+        //.data_out_num = 26,			//MOSI
+
+        //new wiring, 1.75 with mod, 1.78
+		.bck_io_num = 17, //25,			//bit clock
 		.ws_io_num = 33,			//byte clock
         .data_in_num = 34,			//MISO
+        .data_out_num = 27, //26,			//MOSI
+
 		#endif
-        .data_out_num = 26,			//MOSI
     };
 
 	#ifdef BOARD_WHALE
@@ -97,6 +120,8 @@ void init_i2s_and_gpio(int buf_count, int buf_len)
 
     i2s_driver_install(I2S_NUM, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM, &pin_config);
+
+    current_sampling_rate = sample_rate;
 }
 
 void init_deinit_TWDT()
@@ -325,9 +350,10 @@ void i2c_master_deinit()
     printf(" driver uninstalled\n");
 }
 
-void i2c_scan_for_devices()
+void i2c_scan_for_devices(int print, uint8_t *addresses, uint8_t *found)
 {
 	int ret;
+	found[0] = 0;
     for(uint16_t address = 0;address<128;address++)
 	{
     	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -340,15 +366,25 @@ void i2c_scan_for_devices()
 
         if(ret == ESP_OK)
 		{
-			printf("device responds at address %u\n",address);
-			vTaskDelay(100 / portTICK_PERIOD_MS);
+			if(print)
+			{
+				printf("device responds at address %u\n",address);
+			}
+			if(addresses)
+			{
+				addresses[found[0]] = address;
+				found[0]++;
+			}
+			vTaskDelay(1 / portTICK_PERIOD_MS);
 		}
 		else //e.g. ESP_FAIL
 		{
 		}
-	  }
-
-    printf("\nScan done.\n");
+	}
+	if(print)
+	{
+		printf("\nScan done.\n");
+	}
 }
 
 int i2c_codec_two_byte_command(uint8_t b1, uint8_t b2)
@@ -380,6 +416,7 @@ uint8_t i2c_codec_register_read(uint8_t reg)
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, CODEC_I2C_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
     i2c_master_read_byte(cmd, &val, I2C_MASTER_NACK);
+	i2c_master_stop(cmd);
     int ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
 
@@ -443,6 +480,21 @@ int i2c_bus_read(int addr_rw, unsigned char *buf, int buf_len)
 	return ret;
 }
 
+void l33tsp34k(char *buffer, int buf_length)
+{
+	char *buf_ptr = buffer;
+	while (buf_ptr < buffer + buf_length)
+	{
+		if (buf_ptr[0]=='o' || buf_ptr[0]=='O') {buf_ptr[0]='0';}
+		if (buf_ptr[0]=='i' || buf_ptr[0]=='I') {buf_ptr[0]='1';}
+		if (buf_ptr[0]=='z' || buf_ptr[0]=='Z') {buf_ptr[0]='2';}
+		if (buf_ptr[0]=='e' || buf_ptr[0]=='E') {buf_ptr[0]='{';}//3';}
+		if (buf_ptr[0]=='a' || buf_ptr[0]=='A') {buf_ptr[0]='@';}//4';}
+		if (buf_ptr[0]=='s' || buf_ptr[0]=='S') {buf_ptr[0]='5';}
+		buf_ptr++;
+	}
+}
+
 void sha1_to_hex(char *code_sha1_hex, uint8_t *code_sha1)
 {
 	char hex_char[3];
@@ -468,6 +520,50 @@ void sha1_to_hex(char *code_sha1_hex, uint8_t *code_sha1)
 		}
 	}
 	code_sha1_hex[40] = 0;
+}
+
+#ifdef BOARD_GECHO
+const char* GLO_HASH = "1234567890123456789012345678901234567890"; //replace with your unit UID hash for automatic updates
+const char *BINARY_ID = "[0x000000000123]\n\0\0"; //replace with your unit serial number (it's actually a decimal number)
+
+const char* FW_VERSION = "[Gv2/1.0.116]";
+#endif
+
+uint16_t hardware_check()
+{
+	uint8_t adr[20];
+	uint8_t found;
+	i2c_scan_for_devices(0, adr, &found);
+	//printf("hardware_check(): found %d i2c devices: ", found);
+
+	uint8_t expected[5] = {0x1f,0x38,0x39,0x3b,0x3f};
+	uint8_t as_expected = 0;
+	uint8_t i2c_errors = 0;
+
+	for(int i=0;i<found;i++)
+	{
+		//printf("%02x ", adr[i]);
+		if(adr[i]==expected[i])
+		{
+			as_expected++;
+		}
+		else
+		{
+			i2c_errors += 1<<i;
+		}
+	}
+	//printf("\n");
+
+	//printf("as_expected = %d\n", as_expected);
+
+	if(found!=5 || as_expected!=5)
+	{
+		return i2c_errors + (found << 8);
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 void clear_unallocated_memory()
@@ -804,16 +900,20 @@ unsigned char byte_bit_reverse(unsigned char b) {
    return b;
 }
 
+extern persistent_settings_t persistent_settings;
+
 void process_expanders(void *pvParameters)
 {
 	printf("process_expanders(): task running on core ID=%d\n",xPortGetCoreID());
 
 	uint8_t tmp;
 	uint8_t reg;
-	int was_int = 0;
+	//int was_int = 0;
 
 	while(1)
 	{
+		i2c_bus_mutex = 0;
+
 		Delay(EXPANDERS_TIMING_DELAY);
 
 		if(i2c_bus_mutex)
@@ -840,6 +940,11 @@ void process_expanders(void *pvParameters)
 			/*was_int = 0;
 		}*/
 		//printf("process_expanders(): Buttons_bits = %x\n", Buttons_bits);
+
+		if(persistent_settings.ALL_LEDS_OFF)
+		{
+			continue;
+		}
 
 		for(int i=0;i<EXPANDERS;i++)
 		if(LED_bits[i]!=LED_bits[i+EXPANDERS])
@@ -889,8 +994,6 @@ void process_expanders(void *pvParameters)
 			LED_exp_2_byte_cmd(0x01,~exp_bits[i],i+1);
 			exp_bits[i+EXPANDERS] = exp_bits[i];
 		}
-
-		i2c_bus_mutex = 0;
 	}
 }
 
@@ -898,12 +1001,16 @@ void gecho_LED_expander_init()
 {
 	printf("gecho_LED_expander_init()\n");
 	LED_exp_2_byte_cmd(0x03,0x00,1);
+	LED_exp_2_byte_cmd(0x02,0x00,1);
 	LED_exp_2_byte_cmd(0x01,0xff,1);
 	LED_exp_2_byte_cmd(0x03,0x00,2);
+	LED_exp_2_byte_cmd(0x02,0x00,2);
 	LED_exp_2_byte_cmd(0x01,0xff,2);
 	LED_exp_2_byte_cmd(0x03,0x00,3);
+	LED_exp_2_byte_cmd(0x02,0x00,3);
 	LED_exp_2_byte_cmd(0x01,0xff,3);
 	LED_exp_2_byte_cmd(0x03,0x3f,4); //00x11111 -> two blue LEDs, n/a, buttons 1-4, SET button
+	LED_exp_2_byte_cmd(0x02,0x00,4);
 	LED_exp_2_byte_cmd(0x01,0xff,4);
 
 	memset(exp_bits,0,8);	//clear expanders I/O map bits
@@ -1098,7 +1205,7 @@ void gecho_test_buttons()
 
 QueueHandle_t uart_queue;
 
-void gecho_init_MIDI(int uart_num)
+void gecho_init_MIDI(int uart_num, int midi_out_enabled)
 {
 	#ifdef MIDI_SIGNAL_HW_TEST
 
@@ -1158,60 +1265,97 @@ void gecho_init_MIDI(int uart_num)
 	ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
 
 	// Set UART pins(TX: IO16 (UART2 default), RX: IO17 (UART2 default), RTS: IO18, CTS: IO19)
-	//ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 18, 19));
+	//ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, 18, 19));
 	// Set UART pins(TX: IO16 (UART2 default), RX: IO17 (UART2 default), RTS: unused, CTS: unused)
 	//incorrect assignment from ESP-IDF example:
-	//ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+	//ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 	#ifdef BOARD_WHALE
 	#ifdef BOARD_WHALE_ON_EXPANDER_V181
 	//swapped wiring on prototype v1.81:
-	ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, 16, 17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, 16, 17, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 	#else
 	//corrected assignment:
-	ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 	#endif
 	#else //if Gecho
 	#ifdef MIDI_OUT_ENABLED
 	//optional MIDI Out via GPIO27 and the same connector
-	ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, MIDI_OUT_SIGNAL, MIDI_IN_SIGNAL, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-	ESP_ERROR_CHECK(uart_set_line_inverse(UART_NUM_2, UART_INVERSE_TXD));
+	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, MIDI_OUT_SIGNAL, MIDI_IN_SIGNAL, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+	ESP_ERROR_CHECK(uart_set_line_inverse(MIDI_UART, UART_INVERSE_TXD));
 	#else
 	//test midi signal reception at alternative pin #18 (instead of default U2RXD #16)
-	ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, 17, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, 17, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 	#endif
 	#endif
 
 	// Setup UART buffered IO with event queue
 	const int uart_buffer_size = (1024 * 2);
+
 	// Install UART driver using an event queue here
-	ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, uart_buffer_size, uart_buffer_size, 10, &uart_queue, 0));
+	//ESP_ERROR_CHECK(uart_driver_install(MIDI_UART, uart_buffer_size, uart_buffer_size, 10, &uart_queue, 0));
+	// Install UART driver without using an event queue
+	ESP_ERROR_CHECK(uart_driver_install(MIDI_UART, uart_buffer_size, uart_buffer_size, 10, NULL, 0));
 
 	#ifdef BOARD_GECHO
 	#ifdef MIDI_OUT_ENABLED
-
-	//set GPIO16 to High for MIDI Out powering
-	esp_err_t result = gpio_set_direction(MIDI_OUT_PWR, GPIO_MODE_OUTPUT);
-	printf("MIDI_OUT_PWR (#%d) direction set result = %d\n", MIDI_OUT_PWR, result);
-	gpio_set_level(MIDI_OUT_PWR,1);
-
+	if(midi_out_enabled)
+	{
+		//set GPIO16 to High for MIDI Out powering
+		esp_err_t result = gpio_set_direction(MIDI_OUT_PWR, GPIO_MODE_OUTPUT);
+		printf("MIDI_OUT_PWR (#%d) direction set result = %d\n", MIDI_OUT_PWR, result);
+		gpio_set_level(MIDI_OUT_PWR,1);
+	}
 	#endif
+	#endif
+
 	#endif
 }
 
-void gecho_deinit_MIDI(int uart_num)
+void gecho_deinit_MIDI()
 {
-	ESP_ERROR_CHECK(uart_driver_delete(UART_NUM_2));
+	gecho_stop_receive_MIDI();
+	ESP_ERROR_CHECK(uart_driver_delete(MIDI_UART));
+}
+
+void gecho_test_MIDI_input_HW()
+{
+	gecho_deinit_MIDI(); //in case driver already running with a different configuration
+
+	int result = gpio_set_direction(MIDI_IN_SIGNAL, GPIO_MODE_INPUT); //MIDI in (hw test)
+	printf("MIDI_IN_SIGNAL:GPIO18 direction set result = %d\n",result);
+	//result = gpio_set_pull_mode(MIDI_IN_SIGNAL, GPIO_FLOATING);
+	result = gpio_set_pull_mode(MIDI_IN_SIGNAL, GPIO_PULLUP_ONLY);
+	printf("MIDI_IN_SIGNAL:GPIO16 pull mode set result = %d\n",result);
+
+	int val,val0=0;
+	channel_running = 1;
+	unsigned int edge_cnt = 0;
+	while(1)
+	{
+		val = gpio_get_level(MIDI_IN_SIGNAL); //MIDI in (test)
+		//printf("MIDI_IN_SIGNAL=%d...\r",val);
+		//Delay(1);
+		if(val0!=val)
+		{
+			edge_cnt++;
+			val0=val;
+			//printf("\n");
+			printf("MIDI_IN_SIGNAL=%d, edge=%u...\n",val,edge_cnt);
+		}
+	}
 }
 
 void gecho_test_MIDI_input()
 {
-	gecho_init_MIDI(MIDI_UART);
+	gecho_deinit_MIDI(); //in case driver already running with a different configuration
+	gecho_init_MIDI(MIDI_UART, 0); //no midi out
 
 	// Read data from UART.
-	//const int uart_num = UART_NUM_2;
+	//const int uart_num = MIDI_UART;
 	uint8_t data[128];
 	int length = 0;
 	int i;
+	channel_running = 1;
 	while(1)
 	{
 		ESP_ERROR_CHECK(uart_get_buffered_data_len(MIDI_UART, (size_t*)&length));
@@ -1227,9 +1371,7 @@ void gecho_test_MIDI_input()
 			printf("\n");
 		}
 	}
-	#endif
 }
-
 
 void gecho_test_MIDI_output()
 {
@@ -1252,8 +1394,10 @@ void gecho_test_MIDI_output()
 		{0x80,0x35,0x7f}
 	};
 
-	gecho_init_MIDI(MIDI_UART);
+	gecho_deinit_MIDI(); //in case driver already running with a different configuration
+	gecho_init_MIDI(MIDI_UART, 1); //midi out enabled
 
+	channel_running = 1;
 	while(1)
 	{
 		for(int i=0;i<16;i++)
@@ -1401,9 +1545,18 @@ void rotary_encoder_test()
 }
 
 #ifdef BOARD_GECHO
+
 void sync_out_init()
 {
-	esp_err_t result = gpio_set_direction(SYNC1_IO, GPIO_MODE_OUTPUT);
+	esp_err_t result;
+
+	//set MIDI_OUT_SIGNAL to low, so transistor is closed and does not pull sync SYNC1_IO down
+	result = gpio_set_direction(MIDI_OUT_SIGNAL, GPIO_MODE_OUTPUT);
+	printf("MIDI_OUT_SIGNAL (#%d) direction set result = %d\n", MIDI_OUT_SIGNAL, result);
+	gpio_set_level(MIDI_OUT_SIGNAL,0);
+
+	//digital mode
+	result = gpio_set_direction(SYNC1_IO, GPIO_MODE_OUTPUT);
 	printf("SYNC1_OUT (#%d) direction set result = %d\n", SYNC1_IO, result);
 	gpio_set_level(SYNC1_IO,0);
 
@@ -1415,25 +1568,27 @@ void sync_out_init()
 void sync_out_test()
 {
 	int beat = 0;
+	channel_running = 1;
 	while(1)
 	{
-		if(beat%50==5) //every 500ms at 50ms
+		if(beat%200==0) //every 2000ms at 0ms
 		{
 			gpio_set_level(SYNC1_IO,1);
 			LED_RDY_ON;
 		}
-		if(beat%50==10) //every 500ms at 100ms
+		if(beat%200==100) //every 2000ms at 1000ms
 		{
 			gpio_set_level(SYNC1_IO,0);
 			LED_RDY_OFF;
 		}
+
 
 		if(beat%50==0 || beat%50==25) //every 500ms at 0ms or 250ms
 		{
 			gpio_set_level(SYNC2_IO,1);
 			LED_SIG_ON;
 		}
-		if(beat%50==10 || beat%50==35) //every 500ms at 100ms or 350ms
+		if(beat%50==49 || beat%50==24) //every 500ms at 490ms or 240ms
 		{
 			gpio_set_level(SYNC2_IO,0);
 			LED_SIG_OFF;
@@ -1443,37 +1598,326 @@ void sync_out_test()
 		Delay(10);
 	}
 }
+
+void cv_out_init()
+{
+	esp_err_t result;
+
+	//set MIDI_OUT_SIGNAL to low, so transistor is closed and does not pull sync SYNC1_IO down
+	result = gpio_set_direction(MIDI_OUT_SIGNAL, GPIO_MODE_OUTPUT);
+	printf("SYNC1_OUT (#%d) direction set result = %d\n", MIDI_OUT_SIGNAL, result);
+	gpio_set_level(MIDI_OUT_SIGNAL,0);
+
+	//analog mode - DAC1 & DAC2
+	dac_output_enable(DAC_CHANNEL_1);
+	dac_output_enable(DAC_CHANNEL_2);
+}
+
+void cv_out_test()
+{
+	int beat = 0;
+	int note = 0;
+	channel_running = 1;
+	while(1)
+	{
+		//DAC output is 8-bit. Maximum (255) corresponds to VDD.
+
+		if(beat%50==0 || beat%50==25) //every 500ms at 0ms or 250ms
+		{
+			dac_output_voltage(DAC_CHANNEL_2, 150); //cca 1.76V
+			LED_SIG_ON;
+		}
+		if(beat%50==49 || beat%50==24) //every 500ms at 490ms or 240ms
+		{
+			dac_output_voltage(DAC_CHANNEL_2, 50); //cca 0.59V
+			LED_SIG_OFF;
+
+			dac_output_voltage(DAC_CHANNEL_1, note);
+			note+=8;
+			if(note >=64)
+			{
+				note = 0;
+			}
+		}
+
+		beat++;
+		Delay(10);
+	}
+}
+
+void sync_in_test()
+{
+	esp_err_t result;
+
+	//set MIDI_OUT_SIGNAL to low, so transistor is closed and does not pull sync SYNC1_IO down
+	result = gpio_set_direction(MIDI_OUT_SIGNAL, GPIO_MODE_OUTPUT);
+	printf("MIDI_OUT_SIGNAL (#%d) direction set result = %d\n", MIDI_OUT_SIGNAL, result);
+	gpio_set_level(MIDI_OUT_SIGNAL,0); //this seems to have no effect on thresholds below
+
+	/*
+	//if MIDI_OUT_SIGNAL left as input, detection of digital signal at 4.5V works first time
+	result = gpio_set_direction(MIDI_OUT_SIGNAL, GPIO_MODE_INPUT);
+	printf("MIDI_OUT_SIGNAL (#%d) direction set result = %d\n", MIDI_OUT_SIGNAL, result);
+	//gpio_set_pull_mode(MIDI_OUT_SIGNAL, GPIO_FLOATING);
+	//gpio_set_pull_mode(MIDI_OUT_SIGNAL, GPIO_PULLUP_ONLY);
+	//also if set to input with pull-down, it works first time
+	gpio_set_pull_mode(MIDI_OUT_SIGNAL, GPIO_PULLDOWN_ONLY);
+	*/
+
+	//need to assign these pins back to GPIO in case it was used as analog input previously
+	PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[SYNC1_IO], PIN_FUNC_GPIO);
+	PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[SYNC2_IO], PIN_FUNC_GPIO);
+
+	result = gpio_set_direction(SYNC1_IO, GPIO_MODE_INPUT);
+	printf("SYNC1_IO (#%d) direction set result = %d\n", SYNC1_IO, result);
+	gpio_set_pull_mode(SYNC1_IO, GPIO_PULLUP_ONLY); //with the help of pullup the threshold is 4V
+
+	result = gpio_set_direction(SYNC2_IO, GPIO_MODE_INPUT);
+	printf("SYNC2_IO (#%d) direction set result = %d\n", SYNC2_IO, result);
+	gpio_set_pull_mode(SYNC2_IO, GPIO_PULLUP_ONLY); //with the help of pullup the threshold is 4V
+
+	int s1,s2;
+	channel_running = 1;
+	while(1)
+	{
+		s1 = gpio_get_level(SYNC1_IO);
+		s2 = gpio_get_level(SYNC2_IO);
+
+		printf("%d	%d\n", s1,s2);
+
+		Delay(2);
+	}
+}
+
+void cv_in_test()
+{
+	esp_err_t result;
+
+	//set MIDI_OUT_SIGNAL to low, so transistor is closed and does not pull sync SYNC1_IO down
+	result = gpio_set_direction(MIDI_OUT_SIGNAL, GPIO_MODE_OUTPUT);
+	printf("MIDI_OUT_SIGNAL (#%d) direction set result = %d\n", MIDI_OUT_SIGNAL, result);
+	gpio_set_level(MIDI_OUT_SIGNAL,0);
+
+	//adc2_config_width(ADC_WIDTH_BIT_12);
+
+	//the range is 3.0V over 4096 values
+	//adc2_config_channel_atten(ADC2_CHANNEL_8, ADC_ATTEN_DB_0); //GPIO25 is connected to ADC2 channel #8
+	//adc2_config_channel_atten(ADC2_CHANNEL_9, ADC_ATTEN_DB_0); //GPIO26 is connected to ADC2 channel #9
+
+	//the range is 4.1V over 4096 values
+	//adc2_config_channel_atten(ADC2_CHANNEL_8, ADC_ATTEN_DB_2_5); //GPIO25 is connected to ADC2 channel #8
+	//adc2_config_channel_atten(ADC2_CHANNEL_9, ADC_ATTEN_DB_2_5); //GPIO26 is connected to ADC2 channel #9
+
+	//the range is 5.8V over 4096 values
+	adc2_config_channel_atten(ADC2_CHANNEL_8, ADC_ATTEN_DB_6); //GPIO25 is connected to ADC2 channel #8
+	adc2_config_channel_atten(ADC2_CHANNEL_9, ADC_ATTEN_DB_6); //GPIO26 is connected to ADC2 channel #9
+
+	//the range is 9V over 4096 values
+	//adc2_config_channel_atten(ADC2_CHANNEL_8, ADC_ATTEN_DB_11); //GPIO25 is connected to ADC2 channel #8
+	//adc2_config_channel_atten(ADC2_CHANNEL_9, ADC_ATTEN_DB_11); //GPIO26 is connected to ADC2 channel #9
+
+	int s1,s2;
+	channel_running = 1;
+	while(1)
+	{
+		adc2_get_raw(ADC2_CHANNEL_8, ADC_WIDTH_12Bit, &s1);
+		adc2_get_raw(ADC2_CHANNEL_9, ADC_WIDTH_12Bit, &s2);
+
+		printf("%d	%d\n", s1,s2);
+
+		Delay(2);
+	}
+}
 #endif
 
 void whale_restart()
 {
 	codec_set_mute(1); //mute the codec
-	Delay(100);
+	Delay(20);
 	codec_reset();
-	Delay(100);
+	Delay(10);
 	esp_restart();
 	while(1);
 }
 
-void low_voltage_poweroff(void *params)
+int channel_name_ends_with(char *suffix, char *channel_name)
 {
-	printf("low_voltage_poweroff()\n");
-	whale_shutdown();
+	//printf("channel_name_ends_with(suffix=[%s], name=[%s])\n", suffix, channel_name);
+
+	if( channel_name == NULL || suffix == NULL )
+	    return 0;
+
+	  size_t str_len = strlen(channel_name);
+	  size_t suffix_len = strlen(suffix);
+
+	  if(suffix_len > str_len)
+	    return 0;
+
+	  return 0 == strncmp( channel_name + str_len - suffix_len, suffix, suffix_len );
 }
 
-void brownout_init()
+void free_memory_info()
 {
-	#define BROWNOUT_DET_LVL 0
+	int current_free_mem = xPortGetFreeHeapSize();
+	printf("free_memory_info(): initial free memory = %u, currently free: %u, loss = %d\n", init_free_mem, current_free_mem, init_free_mem - current_free_mem);
+}
 
-	REG_WRITE(RTC_CNTL_BROWN_OUT_REG,
-            RTC_CNTL_BROWN_OUT_ENA // Enable BOD
-            | RTC_CNTL_BROWN_OUT_PD_RF_ENA // Automatically power down RF
-            //Reset timeout must be set to >1 even if BOR feature is not used
-            | (2 << RTC_CNTL_BROWN_OUT_RST_WAIT_S)
-            | (BROWNOUT_DET_LVL << RTC_CNTL_DBROWN_OUT_THRES_S));
+int load_song_nvs(char *song_buf, int song_id)
+{
+	esp_err_t res;
+	nvs_handle handle;
+	res = nvs_open("user_song", NVS_READONLY, &handle);
+	if(res!=ESP_OK)
+	{
+		printf("load_song_nvs(): problem with nvs_open(), error = %d\n", res);
+		return 0;
+	}
 
-    rtc_isr_register(low_voltage_poweroff, NULL, RTC_CNTL_BROWN_OUT_INT_ENA_M);
-    printf("Initialized BOD\n");
+	size_t bytes_loaded;
+	char str_id[50];
+	sprintf(str_id,"s%d", song_id);
 
-    REG_SET_BIT(RTC_CNTL_INT_ENA_REG, RTC_CNTL_BROWN_OUT_INT_ENA_M);
+	printf("load_song_nvs(): reading key \"%s\" (a string)\n", str_id);
+	res = nvs_get_str(handle, str_id, song_buf, &bytes_loaded);
+
+	if(res!=ESP_OK) //problem reading data
+	{
+		printf("load_song_nvs(): problem with nvs_get_str() while reading key \"%s\" from namespace \"user_song\", error = %d\n", str_id, res);
+		nvs_close(handle);
+		return 0;
+	}
+	nvs_close(handle);
+
+	if(bytes_loaded == 0)
+	{
+		printf("load_song_nvs(): no user song found\n");
+		song_buf[0]=0;
+		return 0;
+	}
+	printf("load_song_nvs(): user song found, length = %d\n", bytes_loaded);
+	return bytes_loaded;
+}
+
+int store_song_nvs(char *song_buf, int song_id)
+{
+	esp_err_t res;
+	nvs_handle handle;
+	res = nvs_open("user_song", NVS_READWRITE, &handle);
+	if(res!=ESP_OK)
+	{
+		printf("store_song_nvs(): problem with nvs_open(), error = %d\n", res);
+		return 0;
+	}
+
+	char str_id[50];
+	sprintf(str_id,"s%d", song_id);
+
+	printf("store_song_nvs(): writing key \"%s\" (a string)\n", str_id);
+	res = nvs_set_str(handle, str_id, song_buf);
+
+	if(res!=ESP_OK) //problem writing data
+	{
+		printf("store_song_nvs(): problem with nvs_set_str() while writing key \"%s\" in namespace \"user_song\", error = %d\n", str_id, res);
+		nvs_close(handle);
+		return 0;
+	}
+
+	res = nvs_commit(handle);
+	if(res!=ESP_OK) //problem writing data
+	{
+		printf("store_song_nvs(): problem with nvs_commit() while writing key \"%s\" in namespace \"user_song\", error = %d\n", str_id, res);
+		nvs_close(handle);
+		return 0;
+	}
+
+	nvs_close(handle);
+
+	printf("store_song_nvs(): user song stored, length = %d\n", strlen(song_buf));
+	return strlen(song_buf);
+}
+
+int delete_song_nvs(int song_id)
+{
+	esp_err_t res;
+	nvs_handle handle;
+	res = nvs_open("user_song", NVS_READWRITE, &handle);
+	if(res!=ESP_OK)
+	{
+		printf("delete_song_nvs(): problem with nvs_open(), error = %d\n", res);
+		return 0;
+	}
+
+	char str_id[50];
+	sprintf(str_id,"s%d", song_id);
+
+	printf("delete_song_nvs(): erasing key \"%s\" (a string)\n", str_id);
+	res = nvs_erase_key(handle, str_id);
+
+	if(res!=ESP_OK) //problem writing data
+	{
+		printf("delete_song_nvs(): problem with nvs_erase_key() while erasing key \"%s\" in namespace \"user_song\", error = %d\n", str_id, res);
+		nvs_close(handle);
+		return 0;
+	}
+
+	res = nvs_commit(handle);
+	if(res!=ESP_OK) //problem writing data
+	{
+		printf("delete_song_nvs(): problem with nvs_commit() while erasing key \"%s\" in namespace \"user_song\", error = %d\n", str_id, res);
+		nvs_close(handle);
+		return 0;
+	}
+
+	nvs_close(handle);
+
+	printf("delete_song_nvs(): user song deleted\n");
+	return 1;
+}
+
+void set_mic_bias(int bias)
+{
+	printf("set_mic_bias(%d)\n", bias);
+	codec_set_mic_bias(bias);
+	persistent_settings.MIC_BIAS = bias;
+	persistent_settings.MIC_BIAS_updated = 1;
+	persistent_settings.update = 0; //to avoid duplicate update if timer already running down
+	store_persistent_settings(&persistent_settings);
+
+	if(bias==MIC_BIAS_AVDD)
+	{
+		indicate_context_setting(0x04, 4, 200);
+	}
+	else if(bias==MIC_BIAS_2V)
+	{
+		indicate_context_setting(0x02, 4, 200);
+	}
+	else if(bias==MIC_BIAS_2_5V)
+	{
+		indicate_context_setting(0x12, 4, 200);
+	}
+}
+
+void show_board_serial_no()
+{
+	channel_running = 1;
+	ui_ignore_events = 1;
+	display_BCD_numbers((char*)BINARY_ID+11,4);
+	printf("Board s/n = %s\n", BINARY_ID);
+	while(!BUTTON_RST_ON);
+}
+
+void show_fw_version()
+{
+	channel_running = 1;
+	ui_ignore_events = 1;
+	char ver[4];
+	//example: "[Gv2/1.0.113]"
+	ver[0] = FW_VERSION[7];
+	ver[1] = FW_VERSION[9];
+	ver[2] = FW_VERSION[10];
+	ver[3] = FW_VERSION[11];
+	display_BCD_numbers(ver,4);
+
+	printf("FW Version = %s\n", FW_VERSION);
+	while(!BUTTON_RST_ON);
 }

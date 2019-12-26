@@ -17,6 +17,11 @@
 #include "glo_config.h"
 #include "hw/gpio.h"
 #include "hw/ui.h"
+#include "hw/leds.h"
+#include "hw/midi.h"
+#include "hw/init.h"
+#include "hw/sdcard.h"
+#include "hw/fw_update.h"
 #include <string.h>
 
 spi_flash_mmap_handle_t mmap_handle_config;
@@ -205,7 +210,7 @@ void get_samples_map(int *result) {
 }
 
 int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
-	char *config_buffer;
+	char *config_buffer, *line_buf_ptr;
 	map_config_file(&config_buffer);
 	//printf("get_channels_map(): map_config_file returned config_buffer=%p\n", config_buffer);
 
@@ -231,6 +236,7 @@ int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
 	while (!done) {
 		//printf("get_channels_map(): reading line %d\n", lines_parsed);
 		line_length = read_line(&line_ptr, line_buffer);
+		line_buf_ptr = line_buffer;
 		//printf("get_channels_map(): line %d read, length = %d, line = \"%s\"\n", lines_parsed, line_length, line_buffer);
 
 		if (line_length) {
@@ -240,10 +246,10 @@ int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
 					if(channel_filter)
 					{
 						printf("get_channels_map(): found channel with prefix [%s], line = \"%s\"\n", filter, line_buffer);
-						line_buffer+=strlen(filter);
+						line_buf_ptr+=strlen(filter);
 					}
-					map[channels_found].name = (char*) malloc(line_length + 2);
-					strcpy(map[channels_found].name, line_buffer);
+					map[channels_found].name = (char*) malloc(strlen(line_buf_ptr)+2);//line_length + 2);
+					strcpy(map[channels_found].name, line_buf_ptr);
 
 					//reset parameter vars
 					map[channels_found].i1 = 0;
@@ -252,12 +258,13 @@ int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
 					map[channels_found].f4 = 0.0f;
 					map[channels_found].settings = 0;
 					map[channels_found].binaural = 0;
+					map[channels_found].str_param = NULL;
 
 					//parse parameters, if any
-					char *params = strstr(line_buffer, ":");
+					char *params = strstr(line_buf_ptr, ":");
 					if (params) {
 						//printf("parameters found: [%s]\n", params);
-						map[channels_found].name[(int) params - (int) line_buffer] = 0;
+						map[channels_found].name[(int) params - (int) line_buf_ptr] = 0;
 						params++;
 						int params_parsed = 0;
 						int param = 1;
@@ -300,8 +307,23 @@ int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
 								while (params[0] >= '0' && params[0] <= '9') params++;
 								//params_parsed = 1; //binaural is the last possible parameter
 							}
+							else if(!strncmp(params,"str=\"",5))
+							{
+								params+=5;
+								map[channels_found].str_param = (char *)malloc(strlen(params)+1);
+								strcpy(map[channels_found].str_param,params);
 
-							if (params[0] == 0 || (((int) params - (int) line_buffer) > line_length)) {
+								//terminate the string at the ending double quotes
+								char *p_cut = strstr(map[channels_found].str_param, "\"");
+								p_cut[0]=0;
+
+								//move over the parsed string
+								params=strstr(params,"\"");
+								params++;
+								//params_parsed = 1; //str_param is the last possible parameter
+							}
+
+							if (params[0] == 0 || (((int) params - (int) line_buf_ptr) > line_length)) {
 								//printf("nothing left\n");
 								params_parsed = 1; //done
 							} else if (params[0] == ',') {
@@ -321,6 +343,10 @@ int get_channels_map(channels_map_t *map, uint64_t channel_filter) {
 
 					if(channel_filter)
 					{
+						//parse done, release the buffer and mapped memory
+						free(line_buffer);
+						unmap_config_file();
+
 						return channels_found;
 					}
 				}
@@ -1515,11 +1541,29 @@ int get_voice_menu_items(voice_menu_t *items)
 	return items_found;
 }
 
-void load_settings(settings_t *settings, const char* block_name)
+int load_settings(settings_t *settings, const char* block_name)
 {
 	char *config_buffer;
 	map_config_file(&config_buffer);
 	//printf("load_settings(): map_config_file returned config_buffer=%p\n", config_buffer);
+
+	/*
+	printf("load_settings(): config buffer first bytes = %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			config_buffer[0],
+			config_buffer[1],
+			config_buffer[2],
+			config_buffer[3],
+			config_buffer[4],
+			config_buffer[5],
+			config_buffer[6],
+			config_buffer[7]);
+	*/
+
+	if(config_buffer[0]==0xff && config_buffer[1]==0xff && config_buffer[2]==0xff && config_buffer[3]==0xff &&
+	   config_buffer[4]==0xff && config_buffer[5]==0xff && config_buffer[6]==0xff && config_buffer[7]==0xff)
+	{
+		return -1;
+	}
 
 	char *line_ptr = config_buffer;
 	int line_length, lines_parsed = 0;
@@ -1560,6 +1604,7 @@ void load_settings(settings_t *settings, const char* block_name)
 				else if(!strncmp(line_buffer,"AGC_MAX_GAIN_LIMIT",18)) { settings->AGC_MAX_GAIN_LIMIT = atoi(line_buffer+item_name_length); }
 				else if(!strncmp(line_buffer,"AGC_MAX_GAIN",12)) { settings->AGC_MAX_GAIN = atoi(line_buffer+item_name_length); }
 				else if(!strncmp(line_buffer,"AGC_TARGET_LEVEL",16)) { settings->AGC_TARGET_LEVEL = atoi(line_buffer+item_name_length); }
+				else if(!strncmp(line_buffer,"MIC_BIAS",8)) { settings->MIC_BIAS = atoi(line_buffer+item_name_length); }
 
 				if(!strncmp(line_buffer,"CODEC_ANALOG_VOLUME_DEFAULT",27)) { settings->CODEC_ANALOG_VOLUME_DEFAULT = atoi(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"CODEC_DIGITAL_VOLUME_DEFAULT",28)) { settings->CODEC_DIGITAL_VOLUME_DEFAULT = atoi(line_buffer+item_name_length); }
@@ -1573,6 +1618,9 @@ void load_settings(settings_t *settings, const char* block_name)
 				if(!strncmp(line_buffer,"DRUM_LENGTH2",12)) { settings->DRUM_LENGTH2 = atoi(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"DRUM_LENGTH3",12)) { settings->DRUM_LENGTH3 = atoi(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"DRUM_LENGTH4",12)) { settings->DRUM_LENGTH4 = atoi(line_buffer+item_name_length); }
+				if(!strncmp(line_buffer,"IDLE_SET_RST_SHORTCUT",21)) { settings->IDLE_SET_RST_SHORTCUT = atol(line_buffer+item_name_length); }
+				if(!strncmp(line_buffer,"IDLE_RST_SET_SHORTCUT",21)) { settings->IDLE_RST_SET_SHORTCUT = atol(line_buffer+item_name_length); }
+				if(!strncmp(line_buffer,"IDLE_LONG_SET_SHORTCUT",22)) { settings->IDLE_LONG_SET_SHORTCUT = atol(line_buffer+item_name_length); }
 			}
 
 			if (0 == strcmp(line_buffer, block_name)) {
@@ -1595,6 +1643,8 @@ void load_settings(settings_t *settings, const char* block_name)
 	//parse done, release the buffer and mapped memory
 	free(line_buffer);
 	unmap_config_file();
+
+	return block_found;
 }
 
 void load_persistent_settings(persistent_settings_t *settings)
@@ -1604,8 +1654,17 @@ void load_persistent_settings(persistent_settings_t *settings)
 	res = nvs_open("glo_settings", NVS_READONLY, &handle);
 	if(res!=ESP_OK)
 	{
-		printf("load_persistent_settings(): problem with nvs_open(), error = %d\n", res);
-		return;
+		printf("load_persistent_settings(): problem with nvs_open() in ");
+		printf("R/O mode, error = %d\n", res);
+
+		//maybe it was not created yet, will try
+		res = nvs_open("glo_settings", NVS_READWRITE, &handle);
+		if(res!=ESP_OK)
+		{
+			printf("load_persistent_settings(): problem with nvs_open() in ");
+			printf("R/W mode, error = %d\n", res);
+			return;
+		}
 	}
 
 	int8_t val_i8;
@@ -1645,6 +1704,13 @@ void load_persistent_settings(persistent_settings_t *settings)
 		settings->FINE_TUNING = ((double*)&val_u64)[0];
 	}
 
+	res = nvs_get_i8(handle, "TRN", &val_i8);
+	if(res!=ESP_OK) {
+		val_i8 = 0;
+		printf("load_persistent_settings(): TRANSPOSE not found, loading default = %d\n", val_i8);
+	}
+	settings->TRANSPOSE = val_i8;
+
 	res = nvs_get_i8(handle, "BEEPS", &val_i8);
 	if(res!=ESP_OK) { val_i8 = 1; }
 	settings->BEEPS = val_i8;
@@ -1655,6 +1721,54 @@ void load_persistent_settings(persistent_settings_t *settings)
 		printf("load_persistent_settings(): ALL_CHANNELS_UNLOCKED(XTRA_CHNL) not found, loading default = %d\n", val_i8);
 	}
 	settings->ALL_CHANNELS_UNLOCKED = val_i8;
+
+	res = nvs_get_i8(handle, "MIDI_SYNC", &val_i8);
+	if(res!=ESP_OK) { val_i8 = MIDI_SYNC_MODE_DEFAULT; }
+	settings->MIDI_SYNC_MODE = val_i8;
+
+	res = nvs_get_i8(handle, "MIDI_POLY", &val_i8);
+	if(res!=ESP_OK) { val_i8 = MIDI_POLYPHONY_DEFAULT; }
+	settings->MIDI_POLYPHONY = val_i8;
+
+	res = nvs_get_i8(handle, "SENSORS", &val_i8);
+	if(res!=ESP_OK) { val_i8 = PARAMETER_CONTROL_SENSORS_DEFAULT; }
+	settings->PARAMS_SENSORS = val_i8;
+
+	res = nvs_get_i8(handle, "AGC_PGA", &val_i8);
+	if(res!=ESP_OK) { val_i8 = global_settings.AGC_ENABLED ? global_settings.AGC_TARGET_LEVEL : 0; }
+	settings->AGC_ENABLED_OR_PGA = val_i8;
+
+	res = nvs_get_i8(handle, "AGC_G", &val_i8);
+	if(res!=ESP_OK) { val_i8 = global_settings.AGC_MAX_GAIN; }
+	settings->AGC_MAX_GAIN = val_i8;
+
+	res = nvs_get_i8(handle, "MIC_B", &val_i8);
+	if(res!=ESP_OK) { val_i8 = global_settings.MIC_BIAS; }
+	settings->MIC_BIAS = val_i8;
+
+	res = nvs_get_i8(handle, "LEDS_OFF", &val_i8);
+	if(res!=ESP_OK) { val_i8 = 0; }
+	settings->ALL_LEDS_OFF = val_i8;
+
+	res = nvs_get_i8(handle, "PWR_OFF", &val_i8);
+	if(res!=ESP_OK) { val_i8 = 6; /* x10 minutes = 1 hour */ }
+	settings->AUTO_POWER_OFF = val_i8;
+
+	res = nvs_get_i16(handle, "FS", &val_i16);
+	if(res!=ESP_OK) { val_i16 = SAMPLE_RATE_DEFAULT; } //if the key does not exist, load default value
+	settings->SAMPLING_RATE = val_i16;
+
+	res = nvs_get_i8(handle, "SD_CLK", &val_i8);
+	if(res!=ESP_OK) { val_i8 = 1; /*high speed*/ }
+	settings->SD_CARD_SPEED = val_i8;
+
+	res = nvs_get_i8(handle, "ACC_O", &val_i8);
+	if(res!=ESP_OK) { val_i8 = ACC_ORIENTATION_DEFAULT; }
+	settings->ACC_ORIENTATION = val_i8;
+
+	res = nvs_get_i8(handle, "ACC_I", &val_i8);
+	if(res!=ESP_OK) { val_i8 = ACC_INVERT_DEFAULT; }
+	settings->ACC_INVERT = val_i8;
 
 	nvs_close(handle);
 }
@@ -1732,6 +1846,16 @@ void store_persistent_settings(persistent_settings_t *settings)
 			printf("store_persistent_settings(): problem with nvs_set_i16(), error = %d\n", res);
 		}
 	}
+	if(settings->TRANSPOSE_updated)
+	{
+		printf("store_persistent_settings(): TRANSPOSE updated to %d\n", settings->TRANSPOSE);
+		settings->TRANSPOSE_updated = 0;
+		res = nvs_set_i8(handle, "TRN", settings->TRANSPOSE);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
 	if(settings->BEEPS_updated)
 	{
 		printf("store_persistent_settings(): BEEPS updated to %d\n", settings->BEEPS);
@@ -1752,6 +1876,135 @@ void store_persistent_settings(persistent_settings_t *settings)
 			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
 		}
 	}
+	if(settings->MIDI_SYNC_MODE_updated)
+	{
+		printf("store_persistent_settings(): MIDI_SYNC_MODE updated to %d\n", settings->MIDI_SYNC_MODE);
+		settings->MIDI_SYNC_MODE_updated = 0;
+		res = nvs_set_i8(handle, "MIDI_SYNC", settings->MIDI_SYNC_MODE);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+	if(settings->MIDI_POLYPHONY_updated)
+	{
+		printf("store_persistent_settings(): MIDI_POLYPHONY_MODE updated to %d\n", settings->MIDI_POLYPHONY);
+		settings->MIDI_POLYPHONY_updated = 0;
+		res = nvs_set_i8(handle, "MIDI_POLY", settings->MIDI_POLYPHONY);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+	if(settings->PARAMS_SENSORS_updated)
+	{
+		printf("store_persistent_settings(): PARAMS_SENSORS updated to %d\n", settings->PARAMS_SENSORS);
+		settings->PARAMS_SENSORS_updated = 0;
+		res = nvs_set_i8(handle, "SENSORS", settings->PARAMS_SENSORS);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->AGC_ENABLED_OR_PGA_updated)
+	{
+		printf("store_persistent_settings(): AGC_ENABLED_OR_PGA updated to %d\n", settings->AGC_ENABLED_OR_PGA);
+		settings->AGC_ENABLED_OR_PGA_updated = 0;
+		res = nvs_set_i8(handle, "AGC_PGA", settings->AGC_ENABLED_OR_PGA);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->AGC_MAX_GAIN_updated)
+	{
+		printf("store_persistent_settings(): AGC_MAX_GAIN updated to %d\n", settings->AGC_MAX_GAIN);
+		settings->AGC_MAX_GAIN_updated = 0;
+		res = nvs_set_i8(handle, "AGC_G", settings->AGC_MAX_GAIN);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->MIC_BIAS_updated)
+	{
+		printf("store_persistent_settings(): MIC_BIAS updated to %d\n", settings->MIC_BIAS);
+		settings->MIC_BIAS_updated = 0;
+		res = nvs_set_i8(handle, "MIC_B", settings->MIC_BIAS);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->ALL_LEDS_OFF_updated)
+	{
+		printf("store_persistent_settings(): ALL_LEDS_OFF updated to %d\n", settings->ALL_LEDS_OFF);
+		settings->ALL_LEDS_OFF_updated = 0;
+		res = nvs_set_i8(handle, "LEDS_OFF", settings->ALL_LEDS_OFF);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->AUTO_POWER_OFF_updated)
+	{
+		printf("store_persistent_settings(): AUTO_POWER_OFF updated to %d\n", settings->AUTO_POWER_OFF);
+		settings->AUTO_POWER_OFF_updated = 0;
+		res = nvs_set_i8(handle, "PWR_OFF", settings->AUTO_POWER_OFF);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->SAMPLING_RATE_updated)
+	{
+		printf("store_persistent_settings(): SAMPLING_RATE updated to %d\n", settings->SAMPLING_RATE);
+		settings->SAMPLING_RATE_updated = 0;
+		res = nvs_set_i16(handle, "FS", settings->SAMPLING_RATE);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i16(), error = %d\n", res);
+		}
+	}
+
+	if(settings->SD_CARD_SPEED_updated)
+	{
+		printf("store_persistent_settings(): SD_CARD_SPEED updated to %d\n", settings->SD_CARD_SPEED);
+		settings->SD_CARD_SPEED_updated = 0;
+		res = nvs_set_i8(handle, "SD_CLK", settings->SD_CARD_SPEED);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->ACC_ORIENTATION_updated)
+	{
+		printf("store_persistent_settings(): ACC_ORIENTATION updated to %d\n", settings->ACC_ORIENTATION);
+		settings->ACC_ORIENTATION_updated = 0;
+		res = nvs_set_i8(handle, "ACC_O", settings->ACC_ORIENTATION);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
+
+	if(settings->ACC_INVERT_updated)
+	{
+		printf("store_persistent_settings(): ACC_INVERT updated to %d\n", settings->ACC_INVERT);
+		settings->ACC_INVERT_updated = 0;
+		res = nvs_set_i8(handle, "ACC_I", settings->ACC_INVERT);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_i8(), error = %d\n", res);
+		}
+	}
 
 	res = nvs_commit(handle);
 	if(res!=ESP_OK) //problem writing data
@@ -1761,16 +2014,17 @@ void store_persistent_settings(persistent_settings_t *settings)
 	nvs_close(handle);
 }
 
-void load_all_settings()
+int load_all_settings()
 {
-    load_settings(&global_settings, "[global_settings]");
+    int settings_block_found = load_settings(&global_settings, "[global_settings]");
     printf("Global settings loaded: AUTO_POWER_OFF_TIMEOUT=%d, AUTO_POWER_OFF_ONLY_IF_NO_MOTION=%d, DEFAULT_ACCESSIBLE_CHANNELS=%d, "
     		"TUNING_DEFAULT=%f, TUNING_MAX=%f, TUNING_MIN=%f, TUNING_INCREASE_COEFF=%f, "
     		"GRANULAR_DETUNE_COEFF_SET=%f, GRANULAR_DETUNE_COEFF_MUL=%f, GRANULAR_DETUNE_COEFF_MAX=%f, "
     		"TEMPO_BPM_DEFAULT=%d, TEMPO_BPM_MIN=%d, TEMPO_BPM_MAX=%d, TEMPO_BPM_STEP=%d, "
-    		"AGC_ENABLED=%d, AGC_MAX_GAIN=%d, AGC_TARGET_LEVEL=%d, CODEC_ANALOG_VOLUME_DEFAULT=%d, CODEC_DIGITAL_VOLUME_DEFAULT=%d, "
-    		"CLOUDS_HARD_LIMITER_POSITIVE=%d, CLOUDS_HARD_LIMITER_NEGATIVE=%d, CLOUDS_HARD_LIMITER_MAX=%d, CLOUDS_HARD_LIMITER_STEP=%d "
-    		"DRUM_THRESHOLD_ON=%f, DRUM_THRESHOLD_OFF=%f, DRUM_LENGTH1=%d, DRUM_LENGTH2=%d, DRUM_LENGTH3=%d, DRUM_LENGTH4=%d\n",
+    		"AGC_ENABLED=%d, AGC_MAX_GAIN=%d, AGC_TARGET_LEVEL=%d, MIC_BIAS=%d, CODEC_ANALOG_VOLUME_DEFAULT=%d, CODEC_DIGITAL_VOLUME_DEFAULT=%d, "
+    		"CLOUDS_HARD_LIMITER_POSITIVE=%d, CLOUDS_HARD_LIMITER_NEGATIVE=%d, CLOUDS_HARD_LIMITER_MAX=%d, CLOUDS_HARD_LIMITER_STEP=%d, "
+    		"DRUM_THRESHOLD_ON=%f, DRUM_THRESHOLD_OFF=%f, DRUM_LENGTH1=%d, DRUM_LENGTH2=%d, DRUM_LENGTH3=%d, DRUM_LENGTH4=%d, "
+    		"IDLE_SET_RST_SHORTCUT=%llu, IDLE_RST_SET_SHORTCUT=%llu, IDLE_LONG_SET_SHORTCUT=%llu\n",
     		global_settings.AUTO_POWER_OFF_TIMEOUT,
 			global_settings.AUTO_POWER_OFF_ONLY_IF_NO_MOTION,
 			global_settings.DEFAULT_ACCESSIBLE_CHANNELS,
@@ -1788,6 +2042,7 @@ void load_all_settings()
 			global_settings.AGC_ENABLED,
 			global_settings.AGC_MAX_GAIN,
 			global_settings.AGC_TARGET_LEVEL,
+			global_settings.MIC_BIAS,
 			global_settings.CODEC_ANALOG_VOLUME_DEFAULT,
 			global_settings.CODEC_DIGITAL_VOLUME_DEFAULT,
 			global_settings.CLOUDS_HARD_LIMITER_POSITIVE,
@@ -1799,7 +2054,11 @@ void load_all_settings()
 			global_settings.DRUM_LENGTH1,
 			global_settings.DRUM_LENGTH2,
 			global_settings.DRUM_LENGTH3,
-			global_settings.DRUM_LENGTH4);
+			global_settings.DRUM_LENGTH4,
+			global_settings.IDLE_SET_RST_SHORTCUT,
+			global_settings.IDLE_RST_SET_SHORTCUT,
+			global_settings.IDLE_LONG_SET_SHORTCUT
+    );
 
     tempo_bpm = global_settings.TEMPO_BPM_DEFAULT;
     //global_tuning = global_settings.TUNING_DEFAULT;
@@ -1809,15 +2068,29 @@ void load_all_settings()
     //codec_volume_user = global_settings.CODEC_DIGITAL_VOLUME_DEFAULT;
 
     load_persistent_settings(&persistent_settings);
-    printf("Persistent settings loaded: ANALOG_VOLUME=%d, DIGITAL_VOLUME=%d, EQ_BASS=%d, EQ_TREBLE=%d, TEMPO=%d, FINE_TUNING=%f, BEEPS=%d, ALL_CHANNELS_UNLOCKED=%d\n",
+    printf("Persistent settings loaded: ANALOG_VOLUME=%d, DIGITAL_VOLUME=%d, EQ_BASS=%d, EQ_TREBLE=%d, TEMPO=%d, TRANSPOSE=%d, FINE_TUNING=%f, BEEPS=%d, "
+    		"ALL_CHANNELS_UNLOCKED=%d, MIDI_SYNC_MODE=%d, MIDI_POLYPHONY_MODE=%d, PARAMS_SENSORS=%d, AGC_ENABLED_OR_PGA=%d, AGC_MAX_GAIN=%d, "
+    		"ALL_LEDS_OFF=%d, AUTO_POWER_OFF=%d, SAMPLING_RATE=%u, SD_CARD_SPEED=%d, ACC_ORIENTATION=%d, ACC_INVERT=%d\n",
     		persistent_settings.ANALOG_VOLUME,
     		persistent_settings.DIGITAL_VOLUME,
 			persistent_settings.EQ_BASS,
 			persistent_settings.EQ_TREBLE,
 			persistent_settings.TEMPO,
+			persistent_settings.TRANSPOSE,
 			persistent_settings.FINE_TUNING,
 			persistent_settings.BEEPS,
-			persistent_settings.ALL_CHANNELS_UNLOCKED);
+			persistent_settings.ALL_CHANNELS_UNLOCKED,
+			persistent_settings.MIDI_SYNC_MODE,
+			persistent_settings.MIDI_POLYPHONY,
+			persistent_settings.PARAMS_SENSORS,
+			persistent_settings.AGC_ENABLED_OR_PGA,
+			persistent_settings.AGC_MAX_GAIN,
+			persistent_settings.ALL_LEDS_OFF,
+			persistent_settings.AUTO_POWER_OFF,
+			persistent_settings.SAMPLING_RATE,
+			persistent_settings.SD_CARD_SPEED,
+			persistent_settings.ACC_ORIENTATION,
+			persistent_settings.ACC_INVERT);
 
     codec_analog_volume = persistent_settings.ANALOG_VOLUME;
     codec_volume_user = persistent_settings.DIGITAL_VOLUME;
@@ -1832,6 +2105,12 @@ void load_all_settings()
     {
     	channels_found = global_settings.DEFAULT_ACCESSIBLE_CHANNELS;
     }
+
+    midi_sync_mode = persistent_settings.MIDI_SYNC_MODE;
+    midi_polyphony = persistent_settings.MIDI_POLYPHONY;
+    use_acc_or_ir_sensors = persistent_settings.PARAMS_SENSORS;
+
+    return settings_block_found;
 }
 
 void persistent_settings_store_eq()
@@ -1857,32 +2136,261 @@ void persistent_settings_store_tuning()
 	persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
 }
 
-void factory_reset()
+int nvs_erase_namespace(char *namespace)
 {
 	esp_err_t res;
 	nvs_handle handle;
-	res = nvs_open("glo_settings", NVS_READWRITE, &handle);
+
+	res = nvs_open(namespace, NVS_READWRITE, &handle);
 	if(res!=ESP_OK)
 	{
-		printf("factory_reset(): problem with nvs_open(), error = %d\n", res);
-		return;
+		printf("nvs_erase_namespace(): problem with nvs_open(), error = %d\n", res);
+		indicate_error(0x0001, 10, 100);
+		return 1;
 	}
 	res = nvs_erase_all(handle);
 	if(res!=ESP_OK)
 	{
-		printf("factory_reset(): problem with nvs_erase_all(), error = %d\n", res);
-		return;
+		printf("nvs_erase_namespace(): problem with nvs_erase_all(), error = %d\n", res);
+		indicate_error(0x0003, 10, 100);
+		return 2;
 	}
 	res = nvs_commit(handle);
 	if(res!=ESP_OK)
 	{
-		printf("factory_reset(): problem with nvs_commit(), error = %d\n", res);
-		return;
+		printf("nvs_erase_namespace(): problem with nvs_commit(), error = %d\n", res);
+		indicate_error(0x0007, 10, 100);
+		return 3;
 	}
 	nvs_close(handle);
 
-	Delay(100);
-
-	whale_restart();
+	return 0;
 }
 
+void settings_reset()
+{
+	LEDs_all_OFF();
+
+	if(!nvs_erase_namespace("glo_settings")) //if no error
+	{
+		indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_LEFT_8, 4, 50);
+		whale_restart();
+	}
+}
+
+void sd_rec_counter_reset()
+{
+	LEDs_all_OFF();
+
+	if(!nvs_erase_namespace("system_cnt")) //if no error
+	{
+		indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_LEFT_8, 4, 50);
+		whale_restart();
+	}
+}
+
+extern int use_acc_or_ir_sensors;
+
+void set_controls(int settings, int instant_update)
+{
+	printf("set_controls(): settings = %d\n", settings);
+
+	if(settings==3 || settings==PARAMETER_CONTROL_SENSORS_ACCELEROMETER)
+	{
+		use_acc_or_ir_sensors = PARAMETER_CONTROL_SENSORS_ACCELEROMETER;
+		indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_3DS, 3, 100);
+	}
+	if(settings==4 || settings==PARAMETER_CONTROL_SENSORS_IRS)
+	{
+		use_acc_or_ir_sensors = PARAMETER_CONTROL_SENSORS_IRS;
+		indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_IRS, 2, 40);
+	}
+	printf("set_controls(): use_acc_or_ir_sensors set to %d\n", use_acc_or_ir_sensors);
+
+	persistent_settings.PARAMS_SENSORS = use_acc_or_ir_sensors;
+	persistent_settings.PARAMS_SENSORS_updated = 1;
+	persistent_settings.update = 0; //to avoid duplicate update if timer already running down
+	if(instant_update)
+	{
+		store_persistent_settings(&persistent_settings);
+	}
+}
+
+void service_menu_action(int command)
+{
+	printf("service_menu_action(): command = %d\n",command);
+	if(command == SERVICE_MENU_WRITE_CONFIG)
+	{
+		write_config();
+	}
+
+	if(command == SERVICE_MENU_RELOAD_CONFIG)
+	{
+		reload_config();
+	}
+	if(command == SERVICE_MENU_FACTORY_FW)
+	{
+		factory_reset_firmware();
+	}
+	if(command == SERVICE_MENU_REC_COUNTER_RST)
+	{
+		sd_rec_counter_reset();
+	}
+}
+
+void write_config()
+{
+	char *config_buffer;
+	map_config_file(&config_buffer);
+
+	char *config_ends = strstr(config_buffer, "[end]");
+
+	if(!config_ends)
+	{
+		printf("write_config(): end mark not found\n");
+		indicate_error(0x0001, 10, 100);
+		return;
+	}
+	int config_len = (int)config_ends - (int)config_buffer;
+	printf("write_config(): config end mark found at %d\n",config_len);
+
+	int res = sd_card_write_file("config.txt", config_buffer, config_len+9+20*39); //add length of [end], 2 newlines and 20 lines of 39x '-'
+	if(res>0)
+	{
+		indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_FILL_8_LEFT, 1, 50);
+	}
+	else if(res!=-1) //if other error than just SD not present
+	{
+		indicate_error(0x0003, 10, 100);
+	}
+
+	unmap_config_file();
+}
+
+void service_menu()
+{
+	printf("service_menu()\n");
+	int service_menu = 1;
+	int blink_cnt = 0;
+
+	//check for held RST, if need to invoke service menu
+	if(BUTTON_RST_ON)
+	{
+		printf("service_menu(): BUTTON_RST_ON\n");
+
+		while(service_menu)
+		{
+			if(blink_cnt%50==0)
+			{
+				LED_R8_set_byte(0x55);
+			}
+			else if(blink_cnt%50==25)
+			{
+				LED_R8_set_byte(0xaa);
+			}
+			Delay(10);
+
+			LED_O4_set_byte((0x01<<WHICH_USER_BUTTON_ON)>>1);
+
+			if(service_menu==1 && !BUTTON_RST_ON)
+			{
+				service_menu=2;
+			}
+			if(service_menu==2 && BUTTON_RST_ON)
+			{
+				service_menu=0; //exit without any action
+			}
+			if(service_menu==2 && BUTTON_SET_ON)
+			{
+				//exectute action, if an user button (1-4) pressed at the same time
+				if(USER_BUTTON_ON)
+				{
+					service_menu_action(WHICH_USER_BUTTON_ON);
+				}
+				service_menu=0; //exit without any action
+			}
+			blink_cnt++;
+		}
+	}
+	else if(BUTTON_SET_ON)
+	{
+		printf("service_menu(): BUTTON_SET_ON\n");
+
+		uint8_t fm[10];
+		esp_efuse_mac_get_default(fm);
+		//memcpy(fm+6,GLO_HASH,2);
+		sscanf(GLO_HASH, "%2hhx", &fm[6]);
+		sscanf(GLO_HASH+2, "%2hhx", &fm[7]);
+		printf("Factory MAC & 2B Glo hash = %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x\n", fm[0],fm[1],fm[2],fm[3],fm[4],fm[5],fm[6],fm[7]);
+
+		while(service_menu)
+		{
+			Delay(10);
+			LED_O4_set_byte((0x01<<WHICH_USER_BUTTON_ON)>>1);
+
+			if(USER_BUTTON_ON)
+			{
+				//display bytes from mac address on red/white LEDs
+
+				LED_R8_set_byte(byte_bit_reverse(fm[2*(WHICH_USER_BUTTON_ON-1)]));
+				LED_W8_set_byte(byte_bit_reverse(fm[2*(WHICH_USER_BUTTON_ON-1)+1]));
+			}
+			else
+			{
+				LED_R8_all_OFF();
+				if(blink_cnt%50==0)
+				{
+					LED_W8_set_byte(0x55);
+				}
+				else if(blink_cnt%50==25)
+				{
+					LED_W8_set_byte(0xaa);
+				}
+			}
+
+			if(service_menu==1 && !BUTTON_SET_ON)
+			{
+				service_menu=2;
+			}
+			if(service_menu==2 && BUTTON_RST_ON)
+			{
+				service_menu=0; //exit without any action
+			}
+			if(service_menu==2 && BUTTON_SET_ON)
+			{
+				//exectute action, if an user button (1-4) pressed at the same time
+				if(BUTTON_U1_ON)
+				{
+					LED_R8_all_OFF();
+					LED_W8_all_OFF();
+					factory_data_load_SD();
+				}
+				if(BUTTON_U2_ON)
+				{
+					LED_R8_all_OFF();
+					LED_W8_all_OFF();
+					firmware_update_SD();
+				}
+				if(BUTTON_U3_ON && BUTTON_U4_ON)
+				{
+					LED_R8_all_OFF();
+					LED_W8_all_OFF();
+
+					//write activate.htm file to SD card with a correct link
+					sd_card_check(FW_ACTIVATE_LINK_FILE, 1);
+					if(sd_card_present==SD_CARD_PRESENT_WRITEABLE)
+					{
+						indicate_context_setting(SETTINGS_INDICATOR_ANIMATE_FILL_8_RIGHT, 1, 50);
+					}
+					else
+					{
+						indicate_error(0x55aa, 8, 80);
+					}
+				}
+				//service_menu=0; //exit without any action
+			}
+			blink_cnt++;
+		}
+	}
+	LEDs_all_OFF();
+}

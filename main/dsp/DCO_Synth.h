@@ -35,8 +35,31 @@
 //extern volatile int16_t sample_i16;
 //extern float sample_f[2],sample_mix;
 
+//#define DCO_MAX_PARAMS	8	//DCO_BLOCKS_ACTIVE,FREQ,DOUBLE,PHASEamt,ENVamt,RESO,ATTACK,RELEASE
+#define DCO_MAX_PARAMS	5	//FREQ,DOUBLE,PHASEamt,ENVamt,RESO
+#define DCO_WAVEFORMS	4	//sine,square,saw,off
+#define DRIFT_PARAMS_MAX	8	//off, slowly wander, drift or randomize every time at various timing: 1/2,1/4,1/8,1/16
+
+#define DCO_FREQ_DEFAULT 32000
+
 class DCO_Synth
 {
+	//uint8_t *sawtable256;
+	//uint8_t *squaretable256;
+	int erase_echo = 0;
+
+	int param = 0, waveform = 1, drift_params = 0, drift_params_cnt;
+
+	int dco_oversample = 1;
+	int shift_param = 0;
+	int dco_control_mode = 0;
+
+	#ifdef USE_AUTOCORRELATION
+	#define DCO_CONTROL_MODES 3	//acc,buttons,voice
+	#else
+	#define DCO_CONTROL_MODES 2	//acc,buttons
+	#endif
+
 	static const uint8_t sinetable256[256];
 	uint8_t *sawtable256;
 	uint8_t *squaretable256;

@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #define NOTE_FREQ_A4 440.0f //440Hz of A4 note as default for calculation
-#define HALFTONE_STEP_COEF (pow((double)2,(double)1/(double)12))
+#define HALFTONE_STEP_COEF 1.0594630943592952645618252949463f //(pow((double)2,(double)1/(double)12))
 
 #define NOTES_PER_CHORD 3
 extern int *set_chords_map;
@@ -45,8 +45,8 @@ int interval_to_note(char *buffer, int distance);
 //void set_progression_str(char *chord_progression);
 //void set_melody_str(char *melody);
 
-void notes_to_LEDs(int *notes, int *leds, int notes_per_chord);
-int parse_notes(char *base_notes_buf, float *bases_parsed_buf, uint8_t *led_indicators_buf, uint8_t *midi_notes_buf);
+void notes_to_LEDs(int *notes, int8_t *leds, int notes_per_chord);
+int parse_notes(char *base_notes_buf, float *bases_parsed_buf, int8_t *led_indicators_buf, uint8_t *midi_notes_buf);
 
 #ifdef __cplusplus
 }

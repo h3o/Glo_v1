@@ -18,6 +18,7 @@
 #include "glo_config.h"
 #include "hw/gpio.h"
 #include "hw/ui.h"
+#include "hw/leds.h"
 #include <dsp/Filters.h>
 
 extern Filters *fil;
@@ -107,6 +108,7 @@ void binaural_program(void *pvParameters)
 					beats_selected = 0;
 				}
 				event_channel_options = 0;
+				binaural_LEDs_timing_seq = 0;
 			}
 			else if(event_next_channel && beats_selected)
 			{

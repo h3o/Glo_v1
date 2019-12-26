@@ -31,13 +31,12 @@
 #define GRANULAR_DETUNE_A3	0.07f
 
 #define GRANULAR_DETUNE_B1	0.01f
-#define GRANULAR_DETUNE_B2	-0.01f
-#define GRANULAR_DETUNE_B3	0.02f
+#define GRANULAR_DETUNE_B2	0.03f
+#define GRANULAR_DETUNE_B3	0.06f
 
 void granular_sampler(int selected_song);
 void update_grain_freqs(float *freq, float *bases, int voices_used, float detune);
 void granular_sampler_simple();
-void granular_sampler_segmented();
 void load_song_for_granular(int song_id);
 
 #endif /* EXTENSIONS_GRANULAR_H_ */

@@ -21,7 +21,7 @@
 #include "hw/kx123.h"
 #include "hw/kx123_registers.h"
 
-#define USE_ACCELEROMETER
+#define USE_KIONIX_ACCELEROMETER
 //#define DEBUG_ACCELEROMETER
 //#define ACCELEROMETER_TEST
 
@@ -33,12 +33,15 @@ typedef struct {
 } AccelerometerParam_t;
 
 #define ACC_RESULTS 3
+#define ACC_X_AXIS acc_res[0]
+#define ACC_Y_AXIS acc_res[1]
+#define ACC_Z_AXIS acc_res[2]
 
-extern float acc_res[ACC_RESULTS], acc_res1[ACC_RESULTS], acc_res2[ACC_RESULTS], acc_res3[ACC_RESULTS];
+extern float acc_res[ACC_RESULTS], acc_res1[ACC_RESULTS];//, acc_res2[ACC_RESULTS], acc_res3[ACC_RESULTS];
 extern KX123 acc;
 
 void init_accelerometer();
 void process_accelerometer(void *pvParameters);
-//void accelerometer_test();
+void accelerometer_test();
 
 #endif /* ACCELEROMETER_H_ */

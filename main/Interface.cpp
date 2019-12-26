@@ -19,6 +19,7 @@
 #include <hw/codec.h>
 #include <hw/gpio.h>
 #include <hw/signals.h>
+#include <hw/ui.h>
 #include <InitChannels.h>
 #include <MusicBox.h>
 #include <Chaos.h>
@@ -35,12 +36,12 @@ int progressive_rhythm_factor;
 float noise_volume, noise_volume_max, noise_boost_by_sensor, mixed_sample_volume;
 int special_effect, selected_song, selected_melody;
 
-bool PROG_enable_filters,
-	 PROG_enable_rhythm,
-	 PROG_enable_chord_loop,
-     PROG_add_echo,
-     PROG_add_plain_noise,
-	 PROG_noise_effects;
+//bool PROG_enable_filters,
+//	 PROG_enable_rhythm,
+//	 PROG_enable_chord_loop;//,
+     //PROG_add_echo,
+     //PROG_add_plain_noise,
+	 //PROG_noise_effects;
 
 int FILTERS_TYPE_AND_ORDER;
 int ACTIVE_FILTERS_PAIRS;
@@ -88,17 +89,16 @@ int arpeggiator_loop;
 
 int use_alt_settings = 0;
 int use_binaural = 0;
-int use_midi = 0;
 
-void filters_and_signals_init(float resonance)
+void filters_init(float resonance)
 {
-	//printf("filters_and_signals_init()\n");
+	//printf("filters_init()\n");
 	//printf("selected_song = %d\n", selected_song);
 
-	if(PROG_enable_filters)
-	{
+	//if(PROG_enable_filters)
+	//{
 		//initialize filters
-		printf("fil = new Filters(selected_song=%d,resonance=%f)... ", selected_song, resonance);
+		printf("filters_init(): fil = new Filters(selected_song=%d,resonance=%f)... ", selected_song, resonance);
 		fil = new Filters(selected_song, resonance);
 		set_tuning_all(global_tuning);
 
@@ -116,23 +116,13 @@ void filters_and_signals_init(float resonance)
 		fil->setup(FILTERS_TYPE_AND_ORDER);
 		//printf("OK\n");
 	    printf("[fil->setup]Free heap: %u\n", xPortGetFreeHeapSize());
-	}
-
-    if(PROG_add_echo)
-    {
-    	//printf("clear echo buffer (size=%d)...",sizeof(echo_buffer));
-    	//memset(echo_buffer,0,sizeof(echo_buffer));
-    	printf("clear echo buffer (size=%d)...",ECHO_BUFFER_LENGTH*sizeof(int16_t));
-    	memset(echo_buffer,0,ECHO_BUFFER_LENGTH*sizeof(int16_t));
-    	echo_buffer_ptr0 = 0;
-    	printf("done!\n");
-    }
+	//}
 
 	#if WIND_FILTERS > 0
 
     if(wind_voices>0)
     {
-    	printf("filters_and_signals_init(): wind_voices used, n=%d\n",wind_voices);
+    	printf("filters_init(): wind_voices used, n=%d\n",wind_voices);
 
     	for(int i=0;i<WIND_FILTERS;i++)
     	{
@@ -172,9 +162,9 @@ void program_settings_reset()
 	selected_melody = 0;
 	wind_voices = 0;
 
-	PROG_enable_filters = true;
-	PROG_enable_rhythm = true;
-	PROG_enable_chord_loop = true;
+	//PROG_enable_filters = true;
+	//PROG_enable_rhythm = true;
+	//PROG_enable_chord_loop = true;
 	//PROG_enable_LED_indicators_sequencer = true;
 	//PROG_enable_LED_indicators_IR_sensors = true;
     //PROG_enable_S1_control_noise_boost = false;
@@ -182,13 +172,13 @@ void program_settings_reset()
 	//PROG_enable_S3_control_resonance = false;
 	//PROG_enable_S4_control_arpeggiator = false;
 	//PROG_add_OpAmp_ADC12_signal = true;
-	PROG_add_echo = true;
-	PROG_add_plain_noise = true;
+	//PROG_add_echo = true;
+	//PROG_add_plain_noise = true;
 	//PROG_audio_input_microphones = true;
     //PROG_audio_input_pickups = false;
     //PROG_audio_input_IR_sensors = false;
     //PROG_buttons_controls_during_play = true;
-    PROG_noise_effects = false;
+    //PROG_noise_effects = false;
     //PROG_drum_kit = false;
     //PROG_drum_kit_with_echo = false,
     //PROG_wavetable_sample = false;
@@ -223,6 +213,7 @@ void program_settings_reset()
 	progressive_rhythm_factor = 1;
     noise_volume = noise_volume_max;
 
+	#ifdef BOARD_WHALE
     //reset counters and events to default values
     short_press_volume_minus = 0;
     short_press_volume_plus = 0;
@@ -231,16 +222,17 @@ void program_settings_reset()
     long_press_volume_minus = 0;
 	long_press_volume_both = 0;
 
-	#ifdef BOARD_WHALE
 	short_press_button_play = 0;
     play_button_cnt = 0;
     short_press_sequence = 0;
 	#endif
 
-	#ifdef BOARD_GECHO
+	/*
+    #ifdef BOARD_GECHO
     short_press_rst_button = 0;
     long_press_rst_button = 0;
 	#endif
+	*/
 
     sample_lpf[0] = 0;
     sample_lpf[1] = 0;
@@ -286,6 +278,12 @@ extern "C" void set_tuning_all(float freq)
 	fil->fp.tuning_arp_r = freq;
 }
 
+extern "C" void transpose_song(int direction)
+{
+	fil->chord->transpose_song(direction);
+}
+
+#ifdef BOARD_WHALE
 extern "C" void voice_say(const char *segment)
 {
 	//this causes guru meditation error
@@ -339,6 +337,7 @@ extern "C" void voice_say(const char *segment)
 		free(voice_menu_items[i].name);
 	}
 }
+#endif
 
 extern "C" void reload_song_and_melody(char *song, char *melody)
 {

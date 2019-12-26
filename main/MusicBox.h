@@ -22,7 +22,7 @@
 #include <math.h>
 
 typedef struct {
-	int tones;
+	int8_t tones;
 	float *freqs = NULL;
 } CHORD;
 
@@ -32,26 +32,31 @@ public:
 	virtual ~MusicBox();
 	void generate(int max_voices, int allocate_freqs);
 	int get_song_total_chords(char *base_notes);
-	uint8_t* get_current_chord_LED();
+	int8_t* get_current_chord_LED();
 	uint8_t* get_current_chord_midi_notes();
 	int get_current_melody_note();
 	float get_current_melody_freq();
 	int get_song_total_melody_notes(char *melody);
+	void transpose_song(int direction);
 
 	CHORD *chords = NULL;
 
-#define MAX_VOICES_PER_CHORD 16 //9 //only 8 needed for 16 filters by default
+#define MAX_VOICES_PER_CHORD 16 //only first 12 needed for 24 filters by default
 #define BASE_FREQS_PER_CHORD 3
 
+#define LOAD_SONG_NVS	999
+
 	static const int expand_multipliers[MAX_VOICES_PER_CHORD][2];
+	static const int expand_multipliers4[MAX_VOICES_PER_CHORD][2];
+	float midi_chords_expanded[MAX_VOICES_PER_CHORD];
 
 	char *base_notes = NULL;
 	float *bases_parsed = NULL;
-	uint8_t *led_indicators = NULL;
+	int8_t *led_indicators = NULL;
 	uint8_t *midi_notes = NULL;
 
 	float *melody_freqs_parsed = NULL;
-	uint8_t *melody_indicator_leds = NULL;
+	int8_t *melody_indicator_leds = NULL;
 
 	//char *use_song;
 	char *use_melody = NULL;

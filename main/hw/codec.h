@@ -42,18 +42,26 @@
 //#define I2S_AUDIOFREQ 16000
 //#define I2S_AUDIOFREQ I2S_AudioFreq_8k	//chiptunes only
 
-#define SAMPLE_RATE_DEFAULT		I2S_AUDIOFREQ
+#define SAMPLE_RATE_DEFAULT			I2S_AUDIOFREQ
+#define SAMPLING_RATES				5
+extern const uint16_t sampling_rates[SAMPLING_RATES];
+extern const uint8_t sampling_rates_indication[SAMPLING_RATES];
+extern uint8_t sampling_rates_ptr;
+extern uint16_t current_sampling_rate;
 
-#define SAMPLE_RATE_CLOUDS		44100
-//#define SAMPLE_RATE_CLOUDS		40000
-//#define SAMPLE_RATE_CLOUDS		39876
-//#define SAMPLE_RATE_CLOUDS		32000
-//#define SAMPLE_RATE_CLOUDS		24000
+#define SAMPLE_RATE_CLOUDS					44100
+//#define SAMPLE_RATE_CLOUDS				40000
+//#define SAMPLE_RATE_CLOUDS				39876
+//#define SAMPLE_RATE_CLOUDS				32000
+//#define SAMPLE_RATE_CLOUDS				24000
 
-#define SAMPLE_RATE_LOW			24000	//Dekrispator on ESP32
+#define SAMPLE_RATE_LOW						24000	//Dekrispator on ESP32
 
-//#define SAMPLE_RATE_VOICE_MENU	22050
-#define SAMPLE_RATE_VOICE_MENU	48000	//sampling rate in which samples were recorded, otherwise the segments won't align well
+#define SAMPLE_RATE_LOOPER_SAMPLER			44100 //22050
+#define SAMPLE_RATE_SAMPLED_DRUM_SEQUENCER	22050
+
+//#define SAMPLE_RATE_VOICE_MENU			22050
+#define SAMPLE_RATE_VOICE_MENU				48000	//sampling rate in which samples were recorded, otherwise the segments won't align well
 
 #define CODEC_BUF_COUNT_DEFAULT		4
 #define CODEC_BUF_LEN_DEFAULT		64
@@ -69,8 +77,8 @@
 //#define AGC_MAX_GAIN_STEP		6		//in dB
 //#define AGC_LEVEL_MAX			48		//in dB
 
-#define TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION sampleCounter==I2S_AUDIOFREQ /* *2 */ //-AUDIOFREQ_DIV_CORRECTION
-
+/*
+#define TIMING_BY_SAMPLE_ONE_SECOND_W_CORRECTION sampleCounter==I2S_AUDIOFREQ // *2 -AUDIOFREQ_DIV_CORRECTION
 #define TIMING_BY_SAMPLE_EVERY_1_MS		sampleCounter%(2*I2S_AUDIOFREQ/1000)//1000Hz
 #define TIMING_BY_SAMPLE_EVERY_2_MS		sampleCounter%(2*I2S_AUDIOFREQ/500)	//200Hz
 #define TIMING_BY_SAMPLE_EVERY_5_MS		sampleCounter%(2*I2S_AUDIOFREQ/200)	//200Hz
@@ -86,13 +94,38 @@
 #define TIMING_BY_SAMPLE_EVERY_200_MS	sampleCounter%(2*I2S_AUDIOFREQ/5)	//5Hz
 #define TIMING_BY_SAMPLE_EVERY_250_MS	sampleCounter%(2*I2S_AUDIOFREQ/4)	//4Hz
 #define TIMING_BY_SAMPLE_EVERY_500_MS	sampleCounter%(2*I2S_AUDIOFREQ/2)	//2Hz
+*/
+
+#define TIMING_BY_SAMPLE_1_SEC	sampleCounter==I2S_AUDIOFREQ
+																	//freq		cycle at Fs=50780
+#define TIMING_EVERY_1_MS		sampleCounter%(I2S_AUDIOFREQ/1000)	//1000Hz	0-50
+#define TIMING_EVERY_2_MS		sampleCounter%(I2S_AUDIOFREQ/500)	//200Hz		0-101
+#define TIMING_EVERY_4_MS		sampleCounter%(I2S_AUDIOFREQ/250)	//250Hz		0-203
+#define TIMING_EVERY_5_MS		sampleCounter%(I2S_AUDIOFREQ/200)	//200Hz		0-253
+#define TIMING_EVERY_10_MS		sampleCounter%(I2S_AUDIOFREQ/100)	//100Hz		0-507
+#define TIMING_EVERY_20_MS		sampleCounter%(I2S_AUDIOFREQ/50)	//50Hz		0-1015
+#define TIMING_EVERY_25_MS		sampleCounter%(I2S_AUDIOFREQ/40)	//40Hz		0-1269
+#define TIMING_EVERY_40_MS		sampleCounter%(I2S_AUDIOFREQ/25)	//25Hz		0-2031
+#define TIMING_EVERY_50_MS		sampleCounter%(I2S_AUDIOFREQ/20)	//20Hz		0-2539
+#define TIMING_EVERY_83_MS		sampleCounter%(I2S_AUDIOFREQ/12)	//12Hz		0-4231
+#define TIMING_EVERY_100_MS		sampleCounter%(I2S_AUDIOFREQ/10)	//10Hz		0-5078
+#define TIMING_EVERY_125_MS		sampleCounter%(I2S_AUDIOFREQ/8)		//8Hz		0-6347
+#define TIMING_EVERY_166_MS		sampleCounter%(I2S_AUDIOFREQ/6)		//6Hz		0-8463
+#define TIMING_EVERY_200_MS		sampleCounter%(I2S_AUDIOFREQ/5)		//5Hz		0-10156
+#define TIMING_EVERY_250_MS		sampleCounter%(I2S_AUDIOFREQ/4)		//4Hz		0-12695
+#define TIMING_EVERY_500_MS		sampleCounter%(I2S_AUDIOFREQ/2)		//2Hz		0-25390
 
 //#define CODEC_ANALOG_VOLUME_DEFAULT			0x18 //-12db
 //#define CODEC_ANALOG_VOLUME_DEFAULT			0x0C //-6db
 #define CODEC_ANALOG_VOLUME_MAX				0x00 //0db max value
 #define CODEC_ANALOG_VOLUME_MIN				0x63 //99 -> -50db
 #define CODEC_ANALOG_VOLUME_MUTE			0x76 //mute
+#ifdef BOARD_WHALE
 #define ANALOG_VOLUME_STEP					12 //increase or decrease by 6dB
+#else
+//#define ANALOG_VOLUME_STEP					1 //increase or decrease by 0.5dB
+#define ANALOG_VOLUME_STEP					2 //increase or decrease by 1dB
+#endif
 
 //#define CODEC_DIGITAL_VOLUME_DEFAULT		0x0C //-6db
 //#define CODEC_DIGITAL_VOLUME_DEFAULT		0x12 //-9db
@@ -105,14 +138,50 @@
 #define CODEC_DIGITAL_VOLUME_MIN			0x7F //127 -> -63.5db
 #define CODEC_DIGITAL_VOLUME_MUTE			0x80 //mute
 
+#define AGC_LEVELS 9
+extern const int8_t AGC_levels[AGC_LEVELS];
+extern const uint8_t AGC_levels_indication[AGC_LEVELS];
+//extern uint8_t AGC_levels_ptr;
+
 extern volatile uint32_t sampleCounter;
 extern int add_beep;
 extern int mclk_enabled;
 extern int mics_off;
+extern uint8_t ADC_input_select;
+extern uint8_t ADC_LR_enabled;
 
-#define ADC_INPUT_OFF		0
-#define ADC_INPUT_MIC		1
-#define ADC_INPUT_LINE_IN	2
+//line inputs are actually swapped in hardware, so R/L here in defined names is reversed
+#define ADC_INPUT_OFF			0
+#define ADC_INPUT_MIC			1
+#define ADC_INPUT_LINE_IN		2
+#define ADC_INPUT_BOTH_MIXED	3
+//these were swapped around to match manual, as L/R is swapped somewhere along the audio pathway as well
+#define ADC_INPUT_R_MIC_L_LINE	5//4	//right mic on, left line signal
+#define ADC_INPUT_L_MIC_R_LINE	4//5	//left mic on, right line signal
+#define ADC_INPUT_L_LINE		7//6	//mics off, only left line signal, right line possibly analysed for sync
+#define ADC_INPUT_R_LINE		6//7	//mics off, only right line signal, left line possibly analysed for sync
+#define ADC_INPUT_L_MIC_L_LINE	9//8	//left mic on, left line signal, right line possibly analysed for sync
+#define ADC_INPUT_R_MIC_R_LINE	8//9	//right mic on, right line signal, left line possibly analysed for sync
+
+#define ADC_INPUT_MODES			10
+#define ADC_INPUT_DEFAULT		ADC_INPUT_MIC
+
+#define ADC_LR_BOTH_ENABLED		0x03
+#define ADC_LR_MUTE_L			0x02
+#define ADC_LR_MUTE_R			0x01
+#define ADC_LR_MUTE_BOTH		0x00
+//line inputs are actually swapped in hardware, so R/L here in defined names is reversed
+#define ADC_LR_ENABLED_L		(ADC_LR_enabled&0x02)
+#define ADC_LR_ENABLED_R		(ADC_LR_enabled&0x01)
+
+#define ADC_GAIN_MAX			0x60	//01100000 -> 48dB
+#define ADC_GAIN_MIN			0x00	//00000000 -> 0dB
+#define ADC_GAIN_STEP			2		//1dB
+//#define ADC_GAIN_STEP			6		//3dB
+
+#define MIC_BIAS_AVDD			0
+#define MIC_BIAS_2_5V			1
+#define MIC_BIAS_2V				2
 
 extern int codec_analog_volume, codec_digital_volume, codec_volume_user;
 
@@ -133,9 +202,13 @@ extern int EQ_bass_setting, EQ_treble_setting;
  extern "C" {
 #endif
 
-void codec_reset();
 void codec_init();
-int codec_select_input(int use_line_in);
+void codec_reset();
+void codec_silence(uint32_t length);
+int codec_adjust_ADC_gain(int direction);
+int codec_set_mic_bias(int mic_bias);
+int codec_select_input(uint8_t use_line_in);
+int codec_mute_inputs(int status);
 void codec_set_analog_volume();
 void codec_set_digital_volume();
 void codec_set_mute(int status);
@@ -146,6 +219,8 @@ void start_MCLK();
 void stop_MCLK();
 void set_sampling_rate(int new_rate);
 void beep(int freq_div);
+
+int is_valid_sampling_rate(uint16_t rate);
 
 #ifdef __cplusplus
 }

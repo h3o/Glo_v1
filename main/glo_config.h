@@ -21,8 +21,15 @@
 #include "dsp/Dekrispator.h"
 #include "dsp/Antarctica.h"
 
+#ifdef BOARD_WHALE
 #define CONFIG_ADDRESS 0x90000
 #define CONFIG_SIZE 0x10000
+#endif
+
+#ifdef BOARD_GECHO
+#define CONFIG_ADDRESS 0x20000
+#define CONFIG_SIZE 0x10000
+#endif
 
 #define CONFIG_LINE_MAX_LENGTH 500
 
@@ -49,7 +56,7 @@ typedef struct
 
 	uint8_t DEFAULT_ACCESSIBLE_CHANNELS;
 
-	int8_t AGC_ENABLED, AGC_MAX_GAIN, AGC_TARGET_LEVEL, AGC_MAX_GAIN_STEP, AGC_MAX_GAIN_LIMIT;
+	int8_t AGC_ENABLED, AGC_MAX_GAIN, AGC_TARGET_LEVEL, AGC_MAX_GAIN_STEP, AGC_MAX_GAIN_LIMIT, MIC_BIAS;
 	uint8_t CODEC_ANALOG_VOLUME_DEFAULT;
 	uint8_t CODEC_DIGITAL_VOLUME_DEFAULT;
 
@@ -64,28 +71,75 @@ typedef struct
 	int DRUM_LENGTH2;
 	int DRUM_LENGTH3;
 	int DRUM_LENGTH4;
+	uint64_t IDLE_SET_RST_SHORTCUT;
+	uint64_t IDLE_RST_SET_SHORTCUT;
+	uint64_t IDLE_LONG_SET_SHORTCUT;
 
 } settings_t;
 
 typedef struct
 {
 	int ANALOG_VOLUME;
-	int ANALOG_VOLUME_updated;
+	int8_t ANALOG_VOLUME_updated;
+
 	int DIGITAL_VOLUME;
-	int DIGITAL_VOLUME_updated;
+	int8_t DIGITAL_VOLUME_updated;
+
 	int8_t EQ_BASS;
-	int EQ_BASS_updated;
+	int8_t EQ_BASS_updated;
 	int8_t EQ_TREBLE;
-	int EQ_TREBLE_updated;
+	int8_t EQ_TREBLE_updated;
+
 	int TEMPO;
-	int TEMPO_updated;
+	int8_t TEMPO_updated;
+
 	double FINE_TUNING;
-	int FINE_TUNING_updated;
+	int8_t FINE_TUNING_updated;
+
+	int8_t TRANSPOSE;
+	int8_t TRANSPOSE_updated;
+
 	int8_t BEEPS;
-	int BEEPS_updated;
+	int8_t BEEPS_updated;
 
 	int8_t ALL_CHANNELS_UNLOCKED;
-	int ALL_CHANNELS_UNLOCKED_updated;
+	int8_t ALL_CHANNELS_UNLOCKED_updated;
+
+	int8_t MIDI_SYNC_MODE;
+	int8_t MIDI_SYNC_MODE_updated;
+
+	int8_t MIDI_POLYPHONY;
+	int8_t MIDI_POLYPHONY_updated;
+
+	int8_t PARAMS_SENSORS;
+	int8_t PARAMS_SENSORS_updated;
+
+	int8_t AGC_ENABLED_OR_PGA;
+	int8_t AGC_ENABLED_OR_PGA_updated;
+
+	int8_t AGC_MAX_GAIN;
+	int8_t AGC_MAX_GAIN_updated;
+
+	int8_t MIC_BIAS;
+	int8_t MIC_BIAS_updated;
+
+	int8_t ALL_LEDS_OFF;
+	int8_t ALL_LEDS_OFF_updated;
+
+	int8_t AUTO_POWER_OFF;
+	int8_t AUTO_POWER_OFF_updated;
+
+	int8_t SD_CARD_SPEED;
+	int8_t SD_CARD_SPEED_updated;
+
+	uint16_t SAMPLING_RATE;
+	int8_t SAMPLING_RATE_updated;
+
+	int8_t ACC_ORIENTATION;
+	int8_t ACC_ORIENTATION_updated;
+
+	int8_t ACC_INVERT;
+	int8_t ACC_INVERT_updated;
 
 	int update;
 
@@ -93,7 +147,7 @@ typedef struct
 
 //samples
 
-#define SAMPLES_BASE 0xa0000
+#define SAMPLES_BASE 0x330000
 #define SAMPLES_MAX 32
 
 typedef struct
@@ -106,6 +160,7 @@ typedef struct
 	float	f4;
 	int 	settings;
 	int 	binaural;
+	char 	*str_param;
 
 } channels_map_t;
 
@@ -141,6 +196,11 @@ extern binaural_profile_t *binaural_profile;
 
 extern int channels_found, unlocked_channels_found;
 
+#define SERVICE_MENU_WRITE_CONFIG		1
+#define SERVICE_MENU_RELOAD_CONFIG		2
+#define SERVICE_MENU_FACTORY_FW			3
+#define SERVICE_MENU_REC_COUNTER_RST	4
+
 #ifdef __cplusplus
  extern "C" {
 #endif
@@ -166,17 +226,23 @@ void load_isochronic_def(isochronic_def *def, char *block_name);
 
 int get_voice_menu_items(voice_menu_t *items);
 
-void load_settings(settings_t *settings, const char* block_name);
+int load_settings(settings_t *settings, const char* block_name);
 void load_persistent_settings(persistent_settings_t *settings);
 void store_persistent_settings(persistent_settings_t *settings);
 
-void load_all_settings();
+int load_all_settings();
 
 void persistent_settings_store_eq();
 void persistent_settings_store_tempo();
 void persistent_settings_store_tuning();
 
-void factory_reset();
+void settings_reset();
+void sd_rec_counter_reset();
+void set_controls(int settings, int instant_update);
+void service_menu_action(int command);
+void write_config();
+
+void service_menu();
 
 #ifdef __cplusplus
 }

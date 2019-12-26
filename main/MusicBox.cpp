@@ -19,6 +19,7 @@
 #include <Interface.h>
 #include "notes.h"
 #include "glo_config.h"
+#include <hw/leds.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -57,7 +58,56 @@ const int MusicBox::expand_multipliers[MAX_VOICES_PER_CHORD][2] = {
 	{2, 4},		//source 2, freq * 4 //30 filters
 
 	{0, 8}		//source 0, freq * 8 //32 filters
+
+	/*
+	//v3. more balanced
+	{0, 1},		//source 0, no change
+	{1, 1},		//source 1, no change
+	{2, 1}, 	//source 2, no change
+
+	{0, 2},		//source 0, freq * 2 //only powers of 2 make sense to shift octaves up and down (2,4,8)
+	{0, -2},	//source 0, freq / 2
+	{0, 4},		//source 0, freq * 4
+
+	{1, 2},
+	{1, -2},
+	{1, 4},
+
+	{2, 2},
+	{2, -2},
+	{2, 4},
+
+	{0, -4},
+	{1, -4},
+	{2, -4},
+
+	{0, 8}
+	*/
 };
+
+#ifdef MIDI_4_KEYS_POLYPHONY
+const int MusicBox::expand_multipliers4[MAX_VOICES_PER_CHORD][2] = { //for 4-note polyphony
+	{0, 1},
+	{1, 1},
+	{2, 1},
+	{3, 1},
+
+	{0, 2},
+	{1, 2},
+	{2, 2},
+	{3, 2},
+
+	{0, -2},
+	{1, -2},
+	{2, -2},
+	{3, -2},
+
+	{0, 4},
+	{1, 4},
+	{2, 4},
+	{3, 4}
+};
+#endif
 
 MusicBox::MusicBox(int song)
 {
@@ -66,7 +116,18 @@ MusicBox::MusicBox(int song)
 
 	#define PARSE_SONG_BUFFER 4000
 	char *song_buf = (char*)malloc(PARSE_SONG_BUFFER);
-	int total_length = load_song_or_melody(song, "song", song_buf);
+
+	int total_length;
+
+	if(song==LOAD_SONG_NVS)
+	{
+		total_length = load_song_nvs(song_buf, 0);
+	}
+	else
+	{
+		total_length = load_song_or_melody(song, "song", song_buf);
+	}
+
 	printf("MusicBox(%d): load song total lenght = %d\n", song, total_length);
 	if(total_length > PARSE_SONG_BUFFER)
 	{
@@ -76,7 +137,13 @@ MusicBox::MusicBox(int song)
 	if(total_length==0)
 	{
 		printf("MusicBox(%d): could not find the song in config block\n", song);
-		while(1); //halt
+		//while(1); //halt
+		//free(song_buf);
+		//return;
+
+		//indiate error
+		indicate_context_setting(0xff, 4, 250);
+		esp_restart();
 	}
 
 	//base_notes = (char*)malloc(strlen(use_song) * sizeof(char) + 1);
@@ -89,7 +156,7 @@ MusicBox::MusicBox(int song)
 	total_chords = get_song_total_chords(base_notes);
 
 	bases_parsed = (float*)malloc(total_chords * BASE_FREQS_PER_CHORD * sizeof(float)); //default = 8 chords, 3 base freqs for each chord
-	led_indicators = (uint8_t*)malloc(total_chords * 3 * sizeof(uint8_t)); //default = 8 chords, 3 LED lights per chord
+	led_indicators = (int8_t*)malloc(total_chords * 3 * sizeof(int8_t)); //default = 8 chords, 3 LED lights per chord
 	midi_notes = (uint8_t*)malloc(total_chords * 3 * sizeof(uint8_t)); //default = 8 chords, 3 notes per chord
 
 	chords = (CHORD*) malloc(total_chords * sizeof(CHORD));
@@ -128,11 +195,24 @@ MusicBox::~MusicBox()
 		free(chords); chords = NULL;
 	}
 
+	//printf("Free heap: %u\n", xPortGetFreeHeapSize());
+
+	//printf("MusicBox::~MusicBox() releasing melody_freqs_parsed\n");
 	if(melody_freqs_parsed != NULL) { free(melody_freqs_parsed); melody_freqs_parsed = NULL; }
+
+	//printf("MusicBox::~MusicBox() releasing melody_indicator_leds\n");
 	if(melody_indicator_leds != NULL) { free(melody_indicator_leds); melody_indicator_leds = NULL; }
+
+	//printf("MusicBox::~MusicBox() releasing base_notes\n");
 	if(base_notes != NULL) { free(base_notes); base_notes = NULL; }
+
+	//printf("MusicBox::~MusicBox() releasing bases_parsed\n");
 	if(bases_parsed != NULL) { free(bases_parsed); bases_parsed = NULL; }
+
+	//printf("MusicBox::~MusicBox() releasing led_indicators\n");
 	if(led_indicators != NULL) { free(led_indicators); led_indicators = NULL; }
+
+	//printf("MusicBox::~MusicBox() releasing midi_notes\n");
 	if(midi_notes != NULL) { free(midi_notes); midi_notes = NULL; }
 }
 
@@ -193,7 +273,7 @@ int MusicBox::get_song_total_chords(char *base_notes)
 	return chords;
 }
 
-uint8_t* MusicBox::get_current_chord_LED()
+int8_t* MusicBox::get_current_chord_LED()
 {
 	return led_indicators + 3 * current_chord;
 }
@@ -248,3 +328,28 @@ void Chord::clear_old_song_and_melody()
 	}
 }
 */
+extern const int8_t LED_translate_table[];
+
+void MusicBox::transpose_song(int direction)
+{
+	printf("MusicBox::transpose_song(): direction = %d\n", direction);
+
+	int c,t;
+
+	for(c=0;c<total_chords;c++)
+	{
+		for(t=0;t<chords[c].tones;t++)
+		{
+			chords[c].freqs[t] *= pow(HALFTONE_STEP_COEF, direction);
+		}
+
+		(midi_notes + 3 * c)[0] += direction;
+		(midi_notes + 3 * c)[1] += direction;
+		(midi_notes + 3 * c)[2] += direction;
+
+		 //LED_translate_table expects notes defined as: 1=c,2=c#...
+		(led_indicators + 3 * c)[0] = LED_translate_table[1+((midi_notes + 3 * c)[0])%12];
+		(led_indicators + 3 * c)[1] = LED_translate_table[1+((midi_notes + 3 * c)[1])%12];
+		(led_indicators + 3 * c)[2] = LED_translate_table[1+((midi_notes + 3 * c)[2])%12];
+	}
+}

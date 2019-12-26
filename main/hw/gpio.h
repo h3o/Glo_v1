@@ -107,6 +107,14 @@
 #define BUTTON_U2_ON	(Buttons_bits&0x08)
 #define BUTTON_U1_ON	(Buttons_bits&0x10)
 #define BUTTON_RST_ON	(Buttons_bits&0x20)
+#define ANY_BUTTON_ON	(Buttons_bits&0x3f)
+#define USER_BUTTON_ON	(Buttons_bits&0x1e)
+#define NO_BUTTON_ON	(!ANY_BUTTON_ON)
+
+#define BUTTON_ON(x)	(x==0?BUTTON_SET_ON:(x==1?BUTTON_U1_ON:(x==2?BUTTON_U2_ON:(x==3?BUTTON_U3_ON:(x==4?BUTTON_U4_ON:(x==5?BUTTON_RST_ON:0))))))
+#define IS_USER_BTN(x)	(x>0&&x<5)
+
+#define WHICH_USER_BUTTON_ON	(BUTTON_U1_ON?1:BUTTON_U2_ON?2:BUTTON_U3_ON?3:BUTTON_U4_ON?4:0)
 
 #define LED_R8_0_ON		(LED_bits[MAP_RED_LEDS]|=0x80)
 #define LED_R8_0_OFF	(LED_bits[MAP_RED_LEDS]&=~0x80)
@@ -170,6 +178,36 @@
 #define LED_W8_6_OFF	(LED_bits[MAP_WHITE_LEDS]&=~0x02)
 #define LED_W8_7_ON		(LED_bits[MAP_WHITE_LEDS]|=0x01)
 #define LED_W8_7_OFF	(LED_bits[MAP_WHITE_LEDS]&=~0x01)
+
+#define KEY_C_ON LED_W8_0_ON
+#define KEY_C_OFF LED_W8_0_OFF
+#define KEY_D_ON LED_W8_1_ON
+#define KEY_D_OFF LED_W8_1_OFF
+#define KEY_E_ON LED_W8_2_ON
+#define KEY_E_OFF LED_W8_2_OFF
+#define KEY_F_ON LED_W8_3_ON
+#define KEY_F_OFF LED_W8_3_OFF
+#define KEY_G_ON LED_W8_4_ON
+#define KEY_G_OFF LED_W8_4_OFF
+#define KEY_A_ON LED_W8_5_ON
+#define KEY_A_OFF LED_W8_5_OFF
+#define KEY_H_ON LED_W8_6_ON
+#define KEY_H_OFF LED_W8_6_OFF
+#define KEY_C2_ON LED_W8_7_ON
+#define KEY_C2_OFF LED_W8_7_OFF
+
+#define KEY_Cis_ON LED_B5_0_ON
+#define KEY_Cis_OFF LED_B5_0_OFF
+#define KEY_Dis_ON LED_B5_1_ON
+#define KEY_Dis_OFF LED_B5_1_OFF
+#define KEY_Fis_ON LED_B5_2_ON
+#define KEY_Fis_OFF LED_B5_2_OFF
+#define KEY_Gis_ON LED_B5_3_ON
+#define KEY_Gis_OFF LED_B5_3_OFF
+#define KEY_Ais_ON LED_B5_4_ON
+#define KEY_Ais_OFF LED_B5_4_OFF
+
+#define KEY_ALL_OFF KEY_C_OFF;KEY_Cis_OFF;KEY_D_OFF;KEY_Dis_OFF;KEY_E_OFF;KEY_F_OFF;KEY_Fis_OFF;KEY_G_OFF;KEY_Gis_OFF;KEY_A_OFF;KEY_Ais_OFF;KEY_H_OFF;KEY_C2_OFF;
 
 #endif
 

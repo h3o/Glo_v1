@@ -15,17 +15,12 @@
  */
 
 #include <Accelerometer.h>
-//#include <Interface.h>
-//#include <InitChannels.h>
-//#include <hw/codec.h>
-//#include <hw/signals.h>
 #include <hw/init.h>
 #include <hw/gpio.h>
-//#include <string.h>
+#include <hw/ui.h>
 
-
-float acc_res[ACC_RESULTS] = {0,0,-1.0f}, acc_res1[ACC_RESULTS], acc_res2[ACC_RESULTS], acc_res3[ACC_RESULTS];
-#ifdef USE_ACCELEROMETER
+float acc_res[ACC_RESULTS] = {0,0,-1.0f}, acc_res1[ACC_RESULTS];//, acc_res2[ACC_RESULTS], acc_res3[ACC_RESULTS];
+#ifdef USE_KIONIX_ACCELEROMETER
 	KX123 acc(I2C_MASTER_NUM);
 	//int acc_i, acc_stable_cnt;
 #endif
@@ -33,14 +28,12 @@ float acc_res[ACC_RESULTS] = {0,0,-1.0f}, acc_res1[ACC_RESULTS], acc_res2[ACC_RE
 void init_accelerometer()
 {
 	printf("init_accelerometer()\n");
-	#ifdef USE_ACCELEROMETER
-	//#ifdef USE_ACCELEROMETER
+	#ifdef USE_KIONIX_ACCELEROMETER
 	int error = acc.set_defaults();
 	if(error)
 	{
 		printf("ERROR in acc.set_defaults() code=%d\n",error);
 	}
-	//#endif
 
 	#ifdef ACCELEROMETER_TEST
 		accelerometer_test();
@@ -58,7 +51,7 @@ void init_accelerometer()
 /*
 void process_accelerometer(void *pvParameters)
 {
-	#ifdef USE_ACCELEROMETER
+	#ifdef USE_KIONIX_ACCELEROMETER
 	int measure_delay = ((AccelerometerParam_t*)pvParameters)->measure_delay;
 	int cycle_delay = ((AccelerometerParam_t*)pvParameters)->cycle_delay;
 
@@ -154,7 +147,7 @@ void acc_lowPass(float *input, float *output)
 
 void process_accelerometer(void *pvParameters)
 {
-	#ifdef USE_ACCELEROMETER
+	#ifdef USE_KIONIX_ACCELEROMETER
 	int measure_delay = ((AccelerometerParam_t*)pvParameters)->measure_delay;
 	//int cycle_delay = ((AccelerometerParam_t*)pvParameters)->cycle_delay;
 
@@ -166,6 +159,13 @@ void process_accelerometer(void *pvParameters)
 
 	while(1)
 	{
+		Delay(measure_delay);
+
+		if(!accelerometer_active)
+		{
+			continue;
+		}
+
 		if(i2c_driver_installed)
 		{
 			acc.getresults_g(acc_res1);
@@ -178,9 +178,72 @@ void process_accelerometer(void *pvParameters)
 			#endif
 			continue;
 		}
-		Delay(measure_delay);
+
+		if(persistent_settings.ACC_INVERT)
+		{
+			if(persistent_settings.ACC_INVERT & 0x01)
+			{
+				acc_res1[0] = -acc_res1[0];
+			}
+			if(persistent_settings.ACC_INVERT & 0x02)
+			{
+				acc_res1[1] = -acc_res1[1];
+			}
+			if(persistent_settings.ACC_INVERT & 0x04)
+			{
+				acc_res1[2] = -acc_res1[2];
+			}
+		}
+
+		if(persistent_settings.ACC_ORIENTATION)
+		{
+			float tmp;
+			if(persistent_settings.ACC_ORIENTATION==ACC_ORIENTATION_XZY)
+			{
+				tmp = acc_res1[1];
+				acc_res1[1] = acc_res1[2];
+				acc_res1[2] = tmp;
+			}
+			if(persistent_settings.ACC_ORIENTATION==ACC_ORIENTATION_YXZ)
+			{
+				tmp = acc_res1[1];
+				acc_res1[1] = acc_res1[0];
+				acc_res1[0] = tmp;
+			}
+			#ifdef ACC_ORIENTATION_YZX
+			if(persistent_settings.ACC_ORIENTATION==ACC_ORIENTATION_YZX)
+			{
+				tmp = acc_res1[0];
+				acc_res1[0] = acc_res1[1];
+				acc_res1[1] = acc_res1[2];
+				acc_res1[2] = tmp;
+			}
+			#endif
+			#ifdef ACC_ORIENTATION_ZXY
+			if(persistent_settings.ACC_ORIENTATION==ACC_ORIENTATION_ZXY)
+			{
+				tmp = acc_res1[2];
+				acc_res1[2] = acc_res1[1];
+				acc_res1[1] = acc_res1[0];
+				acc_res1[0] = tmp;
+			}
+			#endif
+			if(persistent_settings.ACC_ORIENTATION==ACC_ORIENTATION_ZYX)
+			{
+				tmp = acc_res1[2];
+				acc_res1[2] = acc_res1[0];
+				acc_res1[0] = tmp;
+			}
+		}
 
 		acc_lowPass(acc_res1,acc_res);
+
+		/*
+		normalized_params[0] = acc_res[0]/2.0f+0.5f;
+		normalized_params[3] = acc_res[1]/2.0f+0.5f;
+		normalized_params[1] = acc_res[2]/2.0f+0.5f;
+		normalized_params[2] = 0;//(normalized_params[0] + normalized_params[1] + normalized_params[2]) / 3.0f;
+		*/
 
 		#ifdef DEBUG_ACCELEROMETER
 		printf("process_accelerometer(): in=%f,%f,%f out=%f,%f,%f\n",acc_res1[0],acc_res1[1],acc_res1[2],acc_res[0],acc_res[1],acc_res[2]);
@@ -189,6 +252,16 @@ void process_accelerometer(void *pvParameters)
 	#endif
 }
 
+void accelerometer_test()
+{
+	accelerometer_active = 1;
+	channel_running = 1;
+	while(1)
+	{
+		printf("process_accelerometer(): out=%f,%f,%f\n",acc_res[0],acc_res[1],acc_res[2]);
+		Delay(250);
+	}
+}
 
 #ifdef ACCELEROMETER_TEST
 

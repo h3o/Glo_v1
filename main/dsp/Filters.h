@@ -21,7 +21,7 @@
 #include <hw/codec.h>
 #include <MusicBox.h>
 
-#define FILTERS 22 //30 //20 //18 //16
+#define FILTERS 22 //24 //30 //20 //18 //16
 #define ACCORD MINOR
 
 #define CHORD_MAX_VOICES (FILTERS/2)	//two channels per voice
@@ -30,6 +30,11 @@
 
 //((FILTERS/2)-1) //last one, numbered from 0
 //((FILTERS/2)-2) //one before last, numbered from 0
+
+#if FILTERS==24
+#define DEFAULT_MELODY_VOICE 11 //last one, numbered from 0
+#define DEFAULT_ARPEGGIATOR_FILTER_PAIR 10 //one before last, numbered from 0
+#endif
 
 #if FILTERS==22
 #define DEFAULT_MELODY_VOICE 10 //last one, numbered from 0
@@ -49,11 +54,16 @@
 #define WIND_FILTERS 8
 #define DEFAULT_WIND_VOICES (WIND_FILTERS/2)
 
-#define FILTERS_RESONANCE_DEFAULT	0.99f
-#define FILTERS_RESONANCE_HIGH		0.995f
-#define FILTERS_RESONANCE_HIGHER	0.997f
-#define FILTERS_RESONANCE_HIGHEST	0.999f
-#define FILTERS_RESONANCE_STEP		0.005f
+#define FILTERS_RESONANCE_DEFAULT	0.9900f
+#define FILTERS_RESONANCE_LOWER		0.9915f
+#define FILTERS_RESONANCE_MEDIUM	0.9930f
+#define FILTERS_RESONANCE_HIGH		0.9950f
+#define FILTERS_RESONANCE_HIGHER	0.9970f
+#define FILTERS_RESONANCE_HIGHEST	0.9990f
+#define FILTERS_RESONANCE_ULTRA		0.9995f
+#define FILTERS_RESONANCE_STEP		0.0050f
+
+#define MIDI_4_KEYS_POLYPHONY
 
 typedef struct {
 
@@ -64,6 +74,8 @@ typedef struct {
 	int arpeggiator_filter_pair; //between 0 and CHORD_MAX_VOICES
 
 	float tuning_chords_l, tuning_chords_r, tuning_arp_l, tuning_arp_r, tuning_melody_l, tuning_melody_r;
+
+	uint8_t filters_type;
 
 } FILTERS_PARAMS;
 
@@ -87,6 +99,7 @@ class Filters
 
 		//void start_update_filters(int f1, int f2, int f3, int f4, float freq1, float freq2, float freq3, float freq4);
 		void start_update_filters_pairs(int *filter_n, float *freq, int filters_to_update);
+		void start_next_chord_MIDI(int skip_voices, uint8_t *MIDI_chord);
 		void start_next_chord(int skip_voices);
 		void start_next_melody_note();
 		void progress_update_filters(Filters *fil, bool reset_buffers);

@@ -29,8 +29,12 @@
 #include <hw/Sensors.h>
 #include <hw/sdcard.h>
 #include <hw/ui.h>
+#include <hw/fw_update.h>
+#include <hw/midi.h>
+#include <hw/sync.h>
 
 #include <ChannelsDef.h>
+#include <ProgramSong.h>
 #include <InitChannels.h>
 
 #include <Interface.h>
@@ -39,6 +43,8 @@
 #include <dsp/Bytebeat.h>
 #include <dsp/Chopper.h>
 #include <dsp/DrumKit.h>
+#include <dsp/SamplerLooper.h>
+#include <dsp/FilterFlanger.h>
 
 #include <mi/clouds/clouds.h>
 

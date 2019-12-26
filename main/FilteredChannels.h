@@ -17,7 +17,7 @@
 #ifndef FILTERED_CHANNELS_H_
 #define FILTERED_CHANNELS_H_
 
-void filtered_channel(int use_bg_sample, int use_direct_waves_filters, int use_reverb, float mixed_sample_volume_coef);
+void filtered_channel(int use_bg_sample, int use_direct_waves_filters, int use_reverb, float mixed_sample_volume_coef, int controls_type);
 void filtered_channel_add_echo();
 void filtered_channel_adjust_reverb();
 

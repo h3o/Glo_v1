@@ -50,7 +50,9 @@ void channel_dekrispator()
 	#ifdef DEKRISPATOR_ECHO
 	//initialize echo without using init_echo_buffer() which allocates too much memory
 	echo_dynamic_loop_length = 13000; //ECHO_BUFFER_LENGTH_DEFAULT; //set default value (can be changed dynamically)
-	memset(echo_buffer,0,echo_dynamic_loop_length*sizeof(int16_t)); //clear memory
+	echo_dynamic_loop_current_step = 13;
+	//memset(echo_buffer,0,echo_dynamic_loop_length*sizeof(int16_t)); //clear memory
+	memset(echo_buffer,0,ECHO_BUFFER_LENGTH*sizeof(int16_t));
 	echo_buffer_ptr0 = 0; //reset pointer
 	#endif
 
@@ -59,11 +61,15 @@ void channel_dekrispator()
 	channel_running = 1;
     volume_ramp = 1;
 
+	#ifdef BOARD_WHALE
     BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
+	#endif
 
-	#ifdef SEND_MIDI_NOTES
+	/*
+    #ifdef SEND_MIDI_NOTES
 	gecho_init_MIDI(MIDI_UART);
 	#endif
+	*/
 
 	dkr_patch = new(dekrispator_patch_t);
 	for(int i=0;i<MP_PARAMS;i++) { dkr_patch->patch[i]=0; }

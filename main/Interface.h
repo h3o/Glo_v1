@@ -31,17 +31,17 @@ extern int progressive_rhythm_factor;
 extern float noise_volume, noise_volume_max, noise_boost_by_sensor, mixed_sample_volume;
 extern int special_effect, selected_song, selected_melody;
 
-extern bool
-	PROG_enable_filters,
-	PROG_enable_rhythm,
-	PROG_enable_chord_loop,
-	PROG_add_echo,
-	PROG_add_plain_noise,
-	PROG_noise_effects;
+//extern bool
+//	PROG_enable_filters,
+//	PROG_enable_rhythm,
+//	PROG_enable_chord_loop;//,
+	//PROG_add_echo,
+	//PROG_add_plain_noise,
+	//PROG_noise_effects;
 
-extern bool
-	TEST_enable_V1_control_voice,
-    TEST_enable_V2_control_drum;
+//extern bool
+//	TEST_enable_V1_control_voice,
+    //TEST_enable_V2_control_drum;
 
 #define FILTERS_TYPE_NO_FILTERS 0x00
 #define FILTERS_TYPE_LOW_PASS 0x01
@@ -78,13 +78,12 @@ extern int arpeggiator_loop;
 
 extern int use_alt_settings;
 extern int use_binaural;
-extern int use_midi;
 
 //#ifdef __cplusplus
  extern "C" {
 //#endif
 
-void filters_and_signals_init(float resonance);
+void filters_init(float resonance);
 void program_settings_reset();
 
 void set_tuning(float c_l,float c_r,float m_l,float m_r,float a_l,float a_r);
@@ -94,6 +93,8 @@ void voice_say(const char *segment);
 
 void reload_song_and_melody(char *song, char *melody);
 void randomize_song_and_melody();
+
+void transpose_song(int direction);
 
 //#ifdef __cplusplus
 }
@@ -109,6 +110,8 @@ void voice_say(const char *segment);
 
 void reload_song_and_melody(char *song, char *melody);
 void randomize_song_and_melody();
+
+void transpose_song(int direction);
 
 #endif
 
