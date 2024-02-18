@@ -1,16 +1,17 @@
 /*
  * freqs.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 27, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -58,24 +59,22 @@
 #endif
 
 #if FILTERS == 16
-	//int freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 2200};//, 520}; //2640
 	#if ACCORD == MAJOR
-		int freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 110};//, 520}; //2640
+		int freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 110};
 	#elif ACCORD == MINOR
-		int freqs[] = {440, 660, 880, 520, 220, 1760, 1040, 110};//, 520}; //2640
+		int freqs[] = {440, 660, 880, 520, 220, 1760, 1040, 110};
 	#endif
 #endif
 
 #if FILTERS == 14
-	int freqs[] = {110, 220, 440, 520, 660, 880, 1040};//, 1760};//, 520};
+	int freqs[] = {110, 220, 440, 520, 660, 880, 1040};
 #endif
 
 #if FILTERS == 12
 	#if ACCORD == MAJOR
-		////int freqs[FILTERS/2] = {440, 660, 880, 550, 220};//, 520};
 		int freqs[] = {440, 550, 660, 880, 1100, 2200};
 	#elif ACCORD == MINOR
-		int freqs[] = {440, 660, 880, 520, 220, 1760};//, 1040};//, 520};
+		int freqs[] = {440, 660, 880, 520, 220, 1760};
 	#endif
 #endif
 
@@ -83,7 +82,6 @@
 	#if ACCORD == MAJOR
 		int freqs[] = {440, 550, 660, 880, 1100};
 	#elif ACCORD == MINOR
-		//int freqs[] = {440, 660, 880, 520, 220};
 		int freqs[] = {440, 660, 110, 520, 220};
 	#endif
 #endif
@@ -92,7 +90,6 @@
 	#if ACCORD == MAJOR
 		int freqs[] = {440, 550, 660, 880};
 	#elif ACCORD == MINOR
-		//int freqs[] = {440, 660, 880, 520, 220};
 		int freqs[] = {440, 660, 110, 520};
 	#endif
 #endif
@@ -106,44 +103,11 @@
 #endif
 
 #if FILTERS == 4
-	//int freqs[] = {440, 1760};
 	int freqs[] = {440, 550};
 #endif
 
 #if FILTERS == 2
 	int freqs[] = {440};
-	//int freqs[] = {880};
 #endif
-
-//Others----------------------------------------------------------
-
-//Formantic Synthesis - VOWEL SOUND AS IN... F1 F2 F3
-//source: http://www.soundonsound.com/sos/mar01/articles/synthsec.asp
-/*
-#if FORMANTS == 'F_EE' //"ee" leap
-	int freqs[] = {270, 2300, 3000};
-#endif
-
-
-#if FORMANTS == 'F_OO' //"oo" loop
-	int freqs[] = {300, 870, 2250};
-#endif
-
-#if FORMANTS == 'F_I' //"i" lip
-	int freqs[] = {400, 2000, 2550};
-#endif
-
-#if FORMANTS == 'F_E' //"e" let
-	int freqs[] = {530, 1850, 2500};
-#endif
-
-#if FORMANTS == 'F_U' //"u" lug
-	int freqs[] = {640, 1200, 2400};
-#endif
-
-#if FORMANTS == 'F_A' //"a" lap
-	int freqs[] = {660, 1700, 2400};
-#endif
-*/
 
 #endif /* FREQS_H_ */

@@ -72,7 +72,7 @@ void GranularProcessor::ResetFilters() {
   }
 }
 
-void GranularProcessor::ProcessGranular(
+IRAM_ATTR void GranularProcessor::ProcessGranular(
     FloatFrame* input,
     FloatFrame* output,
     size_t size) {
@@ -156,7 +156,7 @@ void GranularProcessor::ProcessGranular(
   }
 }
 
-void GranularProcessor::Process(
+IRAM_ATTR void GranularProcessor::Process(
     ShortFrame* input,
     ShortFrame* output,
     size_t size) {

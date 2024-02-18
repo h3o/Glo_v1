@@ -1,26 +1,27 @@
 /*
  * notes.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Oct 31, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include "notes.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
 
+#include "notes.h"
 #include "hw/ui.h"
 
 int *set_chords_map = NULL;
@@ -37,23 +38,6 @@ const int halftone_lookup[8] = {
 	2	//h
 };
 
-/*
-const float notes_freqs[13] = {
-	261.6, //c4
-	277.2, //c#4
-	293.7, //d4
-	311.1, //d#4
-	329.6, //e4
-	349.2, //f4
-	370.0, //f#4
-	392.0, //g4
-	415.3, //g#4
-	440.0, //a4
-	466.2, //a#4
-	493.9, //b4
-	523.3  //c5
-};
-*/
 const int key_numbers_to_note_codes[13] = { //not tested
 		1,
 		11,
@@ -149,7 +133,6 @@ int tmp_song_find_note(int note, char *buffer)
 	return chars;
 }
 
-
 int translate_intervals_to_notes(char *buffer, char chord_code, char *fragment)
 {
 	//base note will be 'A3'
@@ -199,34 +182,6 @@ int interval_to_note(char *buffer, int distance)
 	strcpy(buffer,note);
 	return strlen(note);
 }
-
-/*
-void set_progression_str(char *chord_progression)
-{
-    if(progression_str != NULL)
-    {
-    	free(progression_str);
-    	progression_str = NULL;
-    }
-
-    progression_str = (char*)malloc(strlen(chord_progression)+1); //plus one byte for string-terminating zero
-	strcpy(progression_str, chord_progression);
-	//EEPROM_StoreSongAndMelody(progression_str, 0); //store song but no melody
-}
-
-void set_melody_str(char *melody)
-{
-    if(melody_str != NULL)
-    {
-    	free(melody_str);
-    	melody_str = NULL;
-    }
-
-    melody_str = (char*)malloc(strlen(melody)+1); //plus one byte for string-terminating zero
-	strcpy(melody_str, melody);
-	//EEPROM_StoreSongAndMelody(0, melody_str); //store melody but no song
-}
-*/
 
 const int8_t LED_translate_table[14] = {-1,0,10,1,11,2,3,12,4,13,5,14,6,7};
 

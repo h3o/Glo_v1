@@ -8,23 +8,20 @@
  *  Please find the source code and license information within the files located in ../dkr/ subdirectory
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <Dekrispator.h>
-#include <Interface.h>
-//#include <hw/codec.h>
-#include <hw/signals.h>
-//#include <hw/init.h>
-//#include <string.h>
-#include <InitChannels.h>
 #include <string.h>
+
+#include "Dekrispator.h"
+#include "Interface.h"
+#include "hw/signals.h"
+#include "InitChannels.h"
 
 dekrispator_patch_t *dkr_patch;
 
@@ -155,7 +152,8 @@ void process_dekrispator_play(void *pvParameters)
 		{
 			//sample32 = (int32_t)(audiobuff[i]/4) + (int32_t)(((audiobuff[i+1]/4)<<16)&0xffff0000);
 			sample32 = (((int32_t)(audiobuff[i]) + (int32_t)(((audiobuff[i+1])<<16)&0xffff0000)) >> 8) & 0x00ff00ff;
-			i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+			//i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+			i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 		}
 	}
 }

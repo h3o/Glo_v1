@@ -1,16 +1,17 @@
 /*
  * InitChannels.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Nov 26, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -19,6 +20,7 @@
 
 #include <stdint.h> //for uint16_t type etc.
 #include <hw/ui.h>
+#include <dsp/reverb.h>
 #include "glo_config.h" //for binaural_profile_t
 
 //#define SWITCH_I2C_SPEED_MODES
@@ -27,34 +29,6 @@
 #define SHIFT_MELODY_NOTE_TIMING_BY_SAMPLE 5
 #define SHIFT_CHORD_TIMING_BY_SAMPLE 3
 #define SHIFT_ARP_TIMING_BY_SAMPLE 2
-
-//--------------------------------------------------------------
-
-	/*
-	//v1: short reverb (higher freqs)
-	#define BIT_CRUSHER_REVERB_MIN 			(REVERB_BUFFER_LENGTH/50)		//48 samples @48k
-	#define BIT_CRUSHER_REVERB_MAX 			(REVERB_BUFFER_LENGTH/4)		//600 samples @48k
-	*/
-
-	/*
-	//v2: longer reverb (bass)
-	#define BIT_CRUSHER_REVERB_MIN 			(REVERB_BUFFER_LENGTH/5)		//480 samples @48k, 507 @APLL (507.8)
-	#define BIT_CRUSHER_REVERB_MAX 			REVERB_BUFFER_LENGTH			//2400 samples @48k, 2540 @APLL
-	//#define BIT_CRUSHER_REVERB_DEFAULT 	(BIT_CRUSHER_REVERB_MIN*10)		//240 samples @48k
-	//#define BIT_CRUSHER_REVERB_DEFAULT 	(BIT_CRUSHER_REVERB_MIN*20)		//480 samples @48k
-	#define BIT_CRUSHER_REVERB_DEFAULT 		(BIT_CRUSHER_REVERB_MIN*2)
-	*/
-
-	//v3: wide range
-	#define BIT_CRUSHER_REVERB_MIN			(REVERB_BUFFER_LENGTH/50)		//48 samples @48k, 507 @APLL (507.8)
-	#define BIT_CRUSHER_REVERB_MAX			REVERB_BUFFER_LENGTH			//2400 samples @48k, 2540 @APLL
-	#define BIT_CRUSHER_REVERB_DEFAULT		(BIT_CRUSHER_REVERB_MAX/3)
-
-	//wraps at:
-	//BIT_CRUSHER_REVERB=2539,len=2539
-	//BIT_CRUSHER_REVERB=50,len=50
-
-extern int bit_crusher_reverb;
 
 //--------------------------------------------------------------
 
@@ -92,7 +66,7 @@ extern int wind_voices;
 
 //extern float OpAmp_ADC12_signal_conversion_factor;
 
-void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, float resonance, int use_mclk, int set_wind_voices, int set_active_filter_pairs);
+void channel_init(int bg_sample, int song_id, int melody_id, int filters_type, float resonance, int use_mclk, int set_wind_voices, int set_active_filter_pairs, int reverb_ext, int use_reverb);
 void channel_deinit();
 
 //void voice_settings_menu();

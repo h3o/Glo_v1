@@ -1,24 +1,26 @@
 /*
  * gpio.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 21, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <init.h>
-
-#include <hw/codec.h>
-#include <hw/gpio.h>
 #include <string.h>
+
+#include "init.h"
+
+#include "hw/codec.h"
+#include "hw/gpio.h"
 
 uint8_t exp_bits[EXPANDERS*2]; //memory map for I/O signals driven by 4 expanders (double size to keep a previous state)
 uint8_t LED_bits[EXPANDERS*2]; //memory map for individual LEDs before remapping to 4 expanders (double size to keep a previous state)
@@ -36,6 +38,7 @@ void whale_init_power()
 }
 
 #ifdef BOARD_WHALE
+
 void whale_shutdown()
 {
 	printf("whale_shutdown(): Shutting down...\n");
@@ -124,7 +127,8 @@ void RGB_LEDs_blink(int count, int delay)
 		count--;
 	}
 }
-#endif
+
+#endif //BOARD_WHALE
 
 void error_blink(int rc, int rd, int gc, int gd, int bc, int bd) //RGB:count,delay
 {
@@ -154,52 +158,11 @@ void error_blink(int rc, int rd, int gc, int gd, int bc, int bd) //RGB:count,del
 	#endif
 }
 
-//------------ LED Blink task test -------------------------
-
-//LED_BlinkParam_t LED_BlinkParam;
-//LED_BlinkParam.count = 10;
-//LED_BlinkParam.delay = 20;
-//LED_BlinkParam.repeat = 10;
-////xTaskCreate((TaskFunction_t)&LED_Blink, "led_blink_task", 1024, &LED_BlinkParam, 10, NULL);
-//xTaskCreatePinnedToCore((TaskFunction_t)&LED_Blink, "led_blink_task", 2048, &LED_BlinkParam, 10, NULL, 1);
-
-/*
-typedef struct {
-    int delay;
-    int count;
-    int repeat;
-} LED_BlinkParam_t;
-
-void LED_Blink(void *pvParameters)
-{
-	int delay = ((LED_BlinkParam_t*)pvParameters)->delay;
-	int repeat = ((LED_BlinkParam_t*)pvParameters)->repeat;
-	int count = ((LED_BlinkParam_t*)pvParameters)->count;
-	printf("LED_Blink(): task running on core ID=%d\n",xPortGetCoreID());
-	printf("LED_Blink(): delay = %d\n",delay);
-	printf("LED_Blink(): count = %d\n",count);
-	printf("LED_Blink(): repeat = %d\n",repeat);
-
-	for(int i=0;i<repeat;i++)
-	{
-		RGB_LEDs_blink(count,delay);
-	}
-
-	printf("LED_Blink(): done blinking\n");
-
-	//while(1);
-
-    printf("LED_Blink(): deleting task...\n");
-	vTaskDelete(NULL);
-    printf("LED_Blink(): task deleted\n");
-}
-*/
-
 void gecho_init_buttons_GPIO()
 {
 	int result;
 
-#ifdef BOARD_GECHO_V172
+	#ifdef BOARD_GECHO_V172
 	result = gpio_set_direction(LED_RDY, GPIO_MODE_OUTPUT);
 	printf("LED_RDY (#%d) direction set result = %d\n",LED_RDY,result);
 	gpio_set_level(LED_RDY,0); //set the RDY LED on, so the sensor IR LEDs are off (LED is driven by logic low)
@@ -231,16 +194,16 @@ void gecho_init_buttons_GPIO()
 	result = gpio_set_direction(LED_B1, GPIO_MODE_OUTPUT);
 	printf("LED_B1 (#%d) direction set result = %d\n",LED_B1,result);
 	gpio_set_level(LED_B1,1); //set the LED off (driven by logic low)
-	#endif
+	#endif //OVERRIDE_RX_TX_LEDS
 
 	result = gpio_set_direction(GPIO_NUM_35, GPIO_MODE_INPUT); //analog buttons
 	printf("GPI35 direction set result = %d\n",result);
 	result = gpio_set_pull_mode(GPIO_NUM_35, GPIO_FLOATING);
 	printf("GPI35 pull mode set result = %d\n",result);
 
-#endif
+	#endif //BOARD_GECHO_V172
 
-#ifdef BOARD_GECHO_V173
+	#ifdef BOARD_GECHO_V173
 	result = gpio_set_direction(LED_SIG, GPIO_MODE_OUTPUT);
 	printf("LED_SIG (#%d) direction set result = %d\n",LED_SIG,result);
 	gpio_set_level(LED_SIG,1); //light the SIG LED off (driven by logic low)
@@ -258,6 +221,5 @@ void gecho_init_buttons_GPIO()
 	result = gpio_set_pull_mode(GPIO_NUM_35, GPIO_FLOATING);
 	printf("GPI35 pull mode set result = %d\n",result);
 
-#endif
+	#endif //BOARD_GECHO_V173
 }
-

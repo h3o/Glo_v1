@@ -44,7 +44,7 @@ class Diffuser {
     engine_.Init(buffer);
   }
   
-  void Process(FloatFrame* in_out, size_t size) {
+  IRAM_ATTR void Process(FloatFrame* in_out, size_t size) {
     typedef E::Reserve<126,
       E::Reserve<180,
       E::Reserve<269,

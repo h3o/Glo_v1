@@ -81,7 +81,7 @@ class WSOLASamplePlayer {
   }
   
   template<Resolution resolution>
-  void Play(
+  IRAM_ATTR void Play(
       const AudioBuffer<resolution>* buffer,
       const Parameters& parameters,
       float* out,
@@ -128,7 +128,7 @@ class WSOLASamplePlayer {
   }
   
   template<int32_t num_channels, Resolution resolution>
-  int32_t ReadSignBits(
+  IRAM_ATTR int32_t ReadSignBits(
       const AudioBuffer<resolution>* buffer,
       int32_t phase_increment,
       int32_t source,
@@ -214,7 +214,7 @@ class WSOLASamplePlayer {
   }
  private:
   template<Resolution resolution>
-  void ScheduleAlignedWindow(
+  IRAM_ATTR void ScheduleAlignedWindow(
       const AudioBuffer<resolution>* buffer,
       Window* window) {
     int32_t next_window_position = correlator_->best_match();

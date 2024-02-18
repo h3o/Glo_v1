@@ -429,14 +429,24 @@ void DCO_Synth::v1_play_loop()
 
 		for(i=0;i<dco_oversample;i++)
 		{
-			i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+			i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 			sd_write_sample(&sample32);
 		}
 
 		#if defined(MIX_INPUT) || defined(USE_AUTOCORRELATION)
 		for(i=0;i<dco_oversample;i++)
 		{
-			/*ADC_result = */i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+			//i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, 1);
+
+			ADC_sample = ADC_sampleA[ADC_sample_ptr];
+			ADC_sample_ptr++;
+
+			if(ADC_sample_ptr==ADC_SAMPLE_BUFFER)
+			{
+				//i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
+				i2s_read(I2S_NUM, (void*)ADC_sampleA, 4*ADC_SAMPLE_BUFFER, &i2s_bytes_rw, 1);
+				ADC_sample_ptr = 0;
+			}
 		}
 		#endif
 

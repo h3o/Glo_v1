@@ -1,3 +1,19 @@
+This is the firmware source code for following devices:
+
+Glo the Polyphonic Whale v1 (year 2019) 
+Gecho Loopsynth v2 and Glo the Polyphonic Whale v2 (year 2024)
+
+To select for which model to compile, change compiler conditions in the file board.h
+(as this update is primarily for the Loopsynth, the build for Glo Whale 
+was not tested and it might not compile without small modifications)
+
+The newer code (from 2024) should reliably compile against ESP-IDF version 4.4,
+we used commit a49e0180ee638e41876a8f7bc6428a983fc69d66 from 18/08/2023 08:33:19
+
+Find more information at:
+http://phonicbloom.com/
+http://gechologic.com/
+
 # Glo_v1
 firmware for Glo the Polyphonic Whale, ESP32 based pocket synth ( http://phonicbloom.com/ )
 

@@ -1,16 +1,17 @@
 /*
  * gpio.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 21, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -18,10 +19,9 @@
 #define GPIO_H_
 
 #include <stdbool.h>
-#include "driver/include/driver/gpio.h"
-#include "board.h"
 
-//esp-32
+#include "driver/gpio.h"
+#include "board.h"
 
 #ifdef BOARD_WHALE
 
@@ -40,9 +40,9 @@
 
 //-------------------------------------------------------
 
-#define BUTTON_U1_PIN		((gpio_num_t)34) //GPIO_NUM_34 //PWR button
-#define BUTTON_U2_PIN		((gpio_num_t)0) //GPIO_NUM_0 //BOOT button
-#define BUTTON_U3_PIN		((gpio_num_t)35) //GPIO_NUM_35 //RST button
+#define BUTTON_U1_PIN		((gpio_num_t)34)	//PWR button
+#define BUTTON_U2_PIN		((gpio_num_t)0)		//BOOT button
+#define BUTTON_U3_PIN		((gpio_num_t)35)	//RST button
 
 #define BUTTON_U1_ON		(gpio_get_level(BUTTON_U1_PIN)==1) //BT1 connects to VDD when pressed
 #define BUTTON_U2_ON		(gpio_get_level(BUTTON_U2_PIN)==0) //BT2 connects to GND when pressed
@@ -51,8 +51,6 @@
 #define ANY_USER_BUTTON_ON (BUTTON_U1_ON || BUTTON_U2_ON || BUTTON_U3_ON)// || BUTTON_U4_ON)
 
 #endif
-
-//gecho
 
 #ifdef BOARD_GECHO
 
@@ -98,8 +96,29 @@
 #define IR_DRV2_ON	gpio_set_level(IR_DRV2,1)
 #define IR_DRV2_OFF	gpio_set_level(IR_DRV2,0)
 
+#ifdef BOARD_GECHO_V179
+
+#ifdef BOARD_GECHO_V181
+
+#define PCA9555_LED_REGS		0x02
+//#define PCA9555_AUTO_INC_FLAG	0x10
+
+#else
+
+#define PCA9552_LED_REGS		0x06
+#define PCA9552_AUTO_INC_FLAG	0x10
+
+#endif
+
 #define LED_RDY_ON	LED_bits[MAP_ORANGE_LEDS]|=0x08
 #define LED_RDY_OFF	LED_bits[MAP_ORANGE_LEDS]&=~0x08
+
+#else
+
+#define LED_RDY_ON	LED_bits[MAP_ORANGE_LEDS]|=0x08
+#define LED_RDY_OFF	LED_bits[MAP_ORANGE_LEDS]&=~0x08
+
+#endif
 
 #define BUTTON_SET_ON	(Buttons_bits&0x01)
 #define BUTTON_U4_ON	(Buttons_bits&0x02)
@@ -216,11 +235,26 @@
 //#define LED_TEST_DELAY 250
 #define LED_TEST_DELAY 	20
 
+#ifdef BOARD_GECHO_V181
+#define EXPANDERS 4 //here it means 2 expanders with 2 bytes each
+#else
 #define EXPANDERS 4
+#endif
+
 #define EXPANDERS_TIMING_DELAY 10
 extern uint8_t exp_bits[EXPANDERS*2];
 extern uint8_t LED_bits[EXPANDERS*2];
 extern uint8_t Buttons_bits;
+
+#define MAP_RED_LEDS 	0
+#define MAP_ORANGE_LEDS	1
+#define MAP_BLUE_LEDS	2
+#define MAP_GREEN_LEDS	MAP_BLUE_LEDS
+#define MAP_WHITE_LEDS 	3
+
+#ifdef BOARD_GECHO_V179
+
+#else
 
 #define EXP4_INT		GPIO_NUM_35
 
@@ -229,26 +263,12 @@ extern uint8_t Buttons_bits;
 #define EXP_ORANGE_LEDS	2 //and also last 3 green
 #define EXP_GREEN_LEDS	3 //first 2 green
 
-#define MAP_RED_LEDS 	0
-#define MAP_ORANGE_LEDS	1
-#define MAP_BLUE_LEDS	2
-#define MAP_GREEN_LEDS	MAP_BLUE_LEDS
-#define MAP_WHITE_LEDS 	3
-
 #define BUTTONS_BITS LED_bits[MAP_GREEN_LEDS]
+#endif
 
 #ifdef __cplusplus
  extern "C" {
 #endif
-
-/* Exported variables ------------------------------------------------------- */
-//extern __IO uint32_t sys_timer;
-//extern __IO uint32_t sys_clock;
-
-//extern int run_program;
-
-/* Exported functions ------------------------------------------------------- */
-
 
 void Delay(int d);
 
@@ -262,8 +282,6 @@ void RGB_LEDs_blink(int count, int delay);
 void error_blink(int rc, int rd, int gc, int gd, int bc, int bd); //RGB:count,delay
 
 void gecho_init_buttons_GPIO();
-
-//void LED_Blink(void *pvParameters); //function for RTOS task
 
 #ifdef __cplusplus
 }

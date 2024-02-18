@@ -1,32 +1,30 @@
 /*
  * Antarctica.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Sep 24, 2016
  *      Author: mayo
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <dsp/IIR_filters.h>
-//#include <hw/codec.h>
-//#include <hw/gpio.h>
-#include <hw/init.h>
-#include <hw/ui.h>
-//#include <hw/signals.h>
-//#include <hw/controls.h>
-#include <hw/sdcard.h>
-#include <hw/leds.h>
+#include <string.h>
+
 #include "Antarctica.h"
 #include "Binaural.h"
 #include "glo_config.h"
-#include <string.h>
+#include "dsp/IIR_filters.h"
+#include "hw/init.h"
+#include "hw/ui.h"
+#include "hw/sdcard.h"
+#include "hw/leds.h"
 
 volatile uint32_t a_sampleCounter = 0;
 volatile int16_t a_sample_i16 = 0;
@@ -34,8 +32,8 @@ uint32_t a_sample32;
 
 //#define WIND_FILTERS 2
 //#define WIND_FILTERS 4
-#define WIND_FILTERS 8
-//#define WIND_FILTERS 12
+//#define WIND_FILTERS 8
+#define WIND_FILTERS 12
 
 #if WIND_FILTERS == 2
 int wind_freqs[] = {880};
@@ -72,12 +70,10 @@ uint32_t a_random_value;
 float a_sample[WIND_FILTERS/2],a_sample_mix;
 unsigned long a_seconds;
 
-float A_SAMPLE_VOLUME = 2.0f; //1.0f; //4.0f; //0.375f;
+float A_SAMPLE_VOLUME = 2.0f;
 
 float resonance = 0.970;
 float feedback;
-//float resonance_limit[2] = {0.950,0.995};
-//float feedback_limit[2];
 
 float a_volume = 400.0f; //400.0f;
 
@@ -85,8 +81,6 @@ int i, cutoff_sweep = 0;
 
 float mixing_volumes[WIND_FILTERS];
 int mixing_deltas[WIND_FILTERS];
-
-//#define BUTTON_SET_ON	(GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_0)==1)	//SET button: PA0
 
 void filter_setup02()
 {
@@ -103,13 +97,10 @@ void filter_setup02()
 		mixing_deltas[i]=0;
 	}
 
-	//feedback boundaries
 	feedback = 0.96;
-	//feedback_limit[0] = 0.5;
-	//feedback_limit[1] = 1.0;
 }
 
-void song_of_wind_and_ice()
+IRAM_ATTR void song_of_wind_and_ice()
 {
 	printf("ARCTIC_WIND_TEST: filter_setup02()\n");
 	filter_setup02();
@@ -190,8 +181,7 @@ void song_of_wind_and_ice()
     {
 		if (!(a_sampleCounter & 0x00000001)) //right channel
 		{
-			float r = PseudoRNG1a_next_float();
-			memcpy(&a_random_value, &r, sizeof(a_random_value));
+			fill_with_random_value((char*)(&a_random_value));
 
     		a_sample[0] = (float)(32768 - (int16_t)a_random_value) / 32768.0f;
     		a_sample[1] = (float)(32768 - (int16_t)(a_random_value>>16)) / 32768.0f;
@@ -209,18 +199,13 @@ void song_of_wind_and_ice()
 				}
 			}
 
-			i2s_push_sample(I2S_NUM, (char *)&a_sample32, portMAX_DELAY);
+			i2s_write(I2S_NUM, (void*)&a_sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 			sd_write_sample(&a_sample32);
 		}
 		else
 		{
 			a_sample32 = a_sample_i16 << 16;
 		}
-
-		//while(!SPI_I2S_GetFlagStatus(CODEC_I2S, SPI_I2S_FLAG_TXE));
-		//SPI_I2S_SendData(CODEC_I2S, a_sample_i16);
-
-		//pwr_button_shutdown();
 
 		if (a_sampleCounter & 0x00000001) //left channel
 		{
@@ -253,11 +238,6 @@ void song_of_wind_and_ice()
 
 		a_sampleCounter++;
 
-		//if (a_sampleCounter==1337 || a_sampleCounter==20480)
-		//{
-		//	printf("a_sample_i16 value = %d\n", a_sample_i16);
-		//}
-
 		if (a_sampleCounter==I2S_AUDIOFREQ)
     	{
     		//LED_BLUE_OFF;
@@ -279,21 +259,18 @@ void song_of_wind_and_ice()
     		if(isochronic)
     		{
     			iso_program_step++;
-    			//if(iso_program_step==iso_program_timing[isochronic-1])
-    			//{
-        			//iso_program_step = 0;
 
-        			iso_program_freq += iso_program_dir * iso_freq_to_sample_step[isochronic-1];
-        			if(iso_program_freq>=iso_freq_to_sample_timing[(isochronic-1)*2])
-        			{
-        				iso_program_dir = -iso_program_dir;
-        			}
-        			else if(iso_program_freq<=iso_freq_to_sample_timing[(isochronic-1)*2+1])
-        			{
-        				iso_program_dir = -iso_program_dir;
-        			}
-    			//}
-    			printf("iso_program_freq=%d, iso_program_dir=%d, iso_program_step=%d\n", iso_program_freq, iso_program_dir, iso_program_step);
+				iso_program_freq += iso_program_dir * iso_freq_to_sample_step[isochronic-1];
+				if(iso_program_freq>=iso_freq_to_sample_timing[(isochronic-1)*2])
+				{
+					iso_program_dir = -iso_program_dir;
+				}
+				else if(iso_program_freq<=iso_freq_to_sample_timing[(isochronic-1)*2+1])
+				{
+					iso_program_dir = -iso_program_dir;
+				}
+
+				printf("iso_program_freq=%d, iso_program_dir=%d, iso_program_step=%d\n", iso_program_freq, iso_program_dir, iso_program_step);
     		}
     	}
 
@@ -366,6 +343,14 @@ void song_of_wind_and_ice()
 					mixing_volumes[WIND_FILTERS/2]=1.0f;
 				}
 				//indicate_binaural(isochronic_LED[isochronic]);
+				#ifdef BOARD_GECHO
+				LED_O4_all_OFF();
+				if(isochronic)
+				{
+					LED_O4_set(isochronic-1, 1);
+				}
+				#endif
+
 				iso_program_dir = -1;
 				iso_program_step = 0;
 				iso_program_freq = iso_freq_to_sample_timing[(isochronic-1)*2];

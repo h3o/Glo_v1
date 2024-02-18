@@ -1,6 +1,8 @@
 /*
  * IIR_filters.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 18, 2016
  *      Author: mario
  *
@@ -8,21 +10,17 @@
  *  Source: http://www.musicdsp.org/showone.php?id=29
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
 #include "IIR_filters.h"
 #include "dsp/Filters.h"
-//#include "stdio.h"
 #include "esp_attr.h"
-
-//#define ICACHE_FLASH_ATTR __attribute__((section(".irom0.text")))
 
 IIR_Filter::IIR_Filter(void)
 {
@@ -60,7 +58,8 @@ IIR_Filter_HIGH_PASS_4TH_ORDER::~IIR_Filter(void)
 }
 */
 
-float IIR_Filter_LOW_PASS_4TH_ORDER::process(float inputValue) {
+IRAM_ATTR float IIR_Filter_LOW_PASS_4TH_ORDER::process(float inputValue)
+{
     //buf0 += cutoff * (inputValue - buf0);
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
@@ -80,7 +79,8 @@ float IIR_Filter_LOW_PASS_4TH_ORDER::process(float inputValue) {
     //return -buf3; 					//low-pass (phase inverted)
 }
 
-float IIR_Filter_HIGH_PASS_4TH_ORDER::process(float inputValue) {
+IRAM_ATTR float IIR_Filter_HIGH_PASS_4TH_ORDER::process(float inputValue)
+{
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
     buf2 += cutoff * (buf1 - buf2);
@@ -91,19 +91,22 @@ float IIR_Filter_HIGH_PASS_4TH_ORDER::process(float inputValue) {
 }
 
 /*
-float IIR_Filter_LOW_PASS_2ND_ORDER::process(float inputValue) {
+float IIR_Filter_LOW_PASS_2ND_ORDER::process(float inputValue)
+{
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
     return buf1; //2nd order only
 }
 
-float IIR_Filter_HIGH_PASS_2ND_ORDER::process(float inputValue) {
+float IIR_Filter_HIGH_PASS_2ND_ORDER::process(float inputValue)
+{
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
     return inputValue - buf1; //2nd order only
 }
 
-float IIR_Filter_LOW_PASS_8TH_ORDER::process(float inputValue) {
+float IIR_Filter_LOW_PASS_8TH_ORDER::process(float inputValue)
+{
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
     buf2 += cutoff * (buf1 - buf2);
@@ -117,7 +120,8 @@ float IIR_Filter_LOW_PASS_8TH_ORDER::process(float inputValue) {
     return buf7;
 }
 
-float IIR_Filter_HIGH_PASS_8TH_ORDER::process(float inputValue) {
+float IIR_Filter_HIGH_PASS_8TH_ORDER::process(float inputValue)
+{
     buf0 += cutoff * (inputValue - buf0 + feedbackAmount * (buf0 - buf1)); //with resonance
     buf1 += cutoff * (buf0 - buf1);
     buf2 += cutoff * (buf1 - buf2);
@@ -132,11 +136,12 @@ float IIR_Filter_HIGH_PASS_8TH_ORDER::process(float inputValue) {
 }
 */
 
-float IIR_Filter::iir_filter_multi_sum(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes)
+IRAM_ATTR float IIR_Filter::iir_filter_multi_sum(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes)
 {
 	float output = 0.0;
 
-	for(int f=0;f<total_filters;f++) {
+	for(int f=0;f<total_filters;f++)
+	{
 		output += iir_array[f]->process(input)*mixing_volumes[f];
 	}
 
@@ -144,7 +149,7 @@ float IIR_Filter::iir_filter_multi_sum(float input, IIR_Filter **iir_array, int 
 }
 
 
-float IIR_Filter::iir_filter_multi_sum_w_noise(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes, uint16_t noise, float noise_volume)
+IRAM_ATTR float IIR_Filter::iir_filter_multi_sum_w_noise(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes, uint16_t noise, float noise_volume)
 {
 	//float output = input * FILTERS / 2; //add 100% dry signal (before echo)
 	//float output = input * FILTERS / 4; //add 50% dry signal (before echo)
@@ -153,7 +158,8 @@ float IIR_Filter::iir_filter_multi_sum_w_noise(float input, IIR_Filter **iir_arr
 
 	input += (float)(32768 - noise) / 32768.0f * noise_volume;
 
-	for(int f=0;f<total_filters;f++) {
+	for(int f=0;f<total_filters;f++)
+	{
 		output += iir_array[f]->process(input) * mixing_volumes[f];
 		//noise <<= 1;
 		//noise |= f;
@@ -162,7 +168,7 @@ float IIR_Filter::iir_filter_multi_sum_w_noise(float input, IIR_Filter **iir_arr
 	return output/(float)total_filters;
 }
 
-float IIR_Filter::iir_filter_multi_sum_w_noise_and_wind(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes, uint16_t noise, float noise_volume, int wind_voices)
+IRAM_ATTR float IIR_Filter::iir_filter_multi_sum_w_noise_and_wind(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes, uint16_t noise, float noise_volume, int wind_voices)
 {
 	//float output = input * FILTERS / 2; //add 100% dry signal (before echo)
 	float output = input * FILTERS / 4; //add 50% dry signal (before echo)
@@ -175,7 +181,8 @@ float IIR_Filter::iir_filter_multi_sum_w_noise_and_wind(float input, IIR_Filter 
 
 	int f;
 
-	for(f=0;f<wind_voices;f++) {
+	for(f=0;f<wind_voices;f++)
+	{
 		output += iir_array[f]->process(f_noise) * mixing_volumes[f] * 2;
 		//noise <<= 1;
 		//noise |= f;
@@ -184,7 +191,8 @@ float IIR_Filter::iir_filter_multi_sum_w_noise_and_wind(float input, IIR_Filter 
 
 	//printf("[value]iir_filter_multi_sum_w_noise_and_wind(): output = %f\n",output);
 
-	for(f=wind_voices;f<total_filters;f++) {
+	for(f=wind_voices;f<total_filters;f++)
+	{
 		output += iir_array[f]->process(input) * mixing_volumes[f];
 		//noise <<= 1;
 		//noise |= f;

@@ -67,7 +67,7 @@ class LoopingSamplePlayer {
   inline bool synchronized() const { return synchronized_; }
   
   template<Resolution resolution>
-  void Play(
+  IRAM_ATTR void Play(
       const AudioBuffer<resolution>* buffer,
       const Parameters& parameters,
       float* out, size_t size) {

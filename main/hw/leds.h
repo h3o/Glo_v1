@@ -1,16 +1,17 @@
 /*
  * leds.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 21, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -59,6 +60,7 @@
 #define IR_sensors_THRESHOLD_9	0.94f
 */
 
+/*
 //good with 47k resistors too
 #define IR_sensors_THRESHOLD_1	0.080f
 #define IR_sensors_THRESHOLD_2	0.176f
@@ -69,6 +71,34 @@
 #define IR_sensors_THRESHOLD_7	0.658f
 #define IR_sensors_THRESHOLD_8	0.754f
 #define IR_sensors_THRESHOLD_9	0.850f
+*/
+
+#ifdef BOARD_GECHO_V179 //also applies to v1.80 and v1.81
+#define IR_sensors_THRESHOLD_1	(0.100f+0.050f)
+#define IR_sensors_THRESHOLD_2	(0.194f+0.050f)
+#define IR_sensors_THRESHOLD_3	(0.288f+0.050f)
+#define IR_sensors_THRESHOLD_4	(0.381f+0.050f)
+#define IR_sensors_THRESHOLD_5	(0.475f+0.050f)
+#define IR_sensors_THRESHOLD_6	(0.569f+0.050f)
+#define IR_sensors_THRESHOLD_7	(0.663f+0.050f)
+#define IR_sensors_THRESHOLD_8	(0.756f+0.050f)
+#define IR_sensors_THRESHOLD_9	(0.850f+0.050f)
+#else
+#define IR_sensors_THRESHOLD_1	0.100f
+#define IR_sensors_THRESHOLD_2	0.194f
+#define IR_sensors_THRESHOLD_3	0.288f
+#define IR_sensors_THRESHOLD_4	0.381f
+#define IR_sensors_THRESHOLD_5	0.475f
+#define IR_sensors_THRESHOLD_6	0.569f
+#define IR_sensors_THRESHOLD_7	0.663f
+#define IR_sensors_THRESHOLD_8	0.756f
+#define IR_sensors_THRESHOLD_9	0.850f
+#endif
+
+#define SENSOR_ID_RED		0
+#define SENSOR_ID_ORANGE	1
+#define SENSOR_ID_BLUE		2
+#define SENSOR_ID_WHITE		3
 
 #define SENSOR_THRESHOLD_ORANGE_4 (ir_res[1] > IR_sensors_THRESHOLD_7)
 #define SENSOR_THRESHOLD_ORANGE_3 (ir_res[1] > IR_sensors_THRESHOLD_5)
@@ -103,6 +133,7 @@
 #define SEQUENCER_INDICATOR_DIV 4
 extern int sequencer_LEDs_timing_seq;
 extern uint8_t binaural_LEDs_timing_seq;
+extern int SENSORS_LEDS_indication_enabled;
 
 #define SETTINGS_INDICATOR_BASE						0x101
 #define SETTINGS_INDICATOR_ANIMATE_LEFT_4			SETTINGS_INDICATOR_BASE+1
@@ -130,23 +161,23 @@ extern uint8_t binaural_LEDs_timing_seq;
  extern "C" {
 #endif
 
-/*
-void IR_sensors_LED_indicators(int *sensor_values);
-*/
-void LED_sequencer_indicators(); //int current_chord, int total_chords);
+void LED_sequencer_indicators();
 void display_chord(int8_t *chord_LEDs, int total_leds);
 
  #ifdef BOARD_GECHO
 
 void LED_W8_all_ON();
 void LED_W8_all_OFF();
+void LED_B5_all_ON();
 void LED_B5_all_OFF();
+void LED_O4_all_ON();
 void LED_O4_all_OFF();
 void LED_R8_all_OFF();
 void LEDs_all_OFF();
 
 void LED_R8_set(int led, int status);
 void LED_O4_set(int led, int status);
+void LED_W8_set(int led, int status);
 
 void LED_R8_set_byte(int value); //default: left to right
 void LED_O4_set_byte(int value);
@@ -167,7 +198,6 @@ void KEY_LED_all_off();
 
 void display_number_of_chords(int row1, int row2);
 void ack_by_signal_LED();
-void display_code_challenge(uint32_t *code);
 
 void display_volume_level_indicator_f(float value, float min, float max);
 void display_volume_level_indicator_i(int value, int min, int max);

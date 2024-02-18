@@ -27,7 +27,7 @@
 
 #include <inttypes.h>
 #include <stddef.h>
-#include "esp32/include/esp_attr.h"
+#include "esp_attr.h"
 
 #ifndef NULL
 #define NULL 0

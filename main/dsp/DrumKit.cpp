@@ -1,16 +1,17 @@
 /*
  * DrumKit.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: 26 Nov 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -76,7 +77,7 @@ void channel_drum_kit()
 	sampleCounter = 0;
 	seconds = 0;
 
-	channel_init(9, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0); //map the drums sample from Flash to RAM
+	channel_init(9, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0, 0, 0); //map the drums sample from Flash to RAM
 
 	//this overrides echo parameters set in channel_init()
 	#ifdef DRUM_KIT_ECHO
@@ -216,101 +217,8 @@ void channel_drum_kit()
 					#endif
 				}
 			}
-
-/*
-			if(acc_res[1] < -0.8f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 64;
-			}
-			else if(acc_res[1] < -0.65f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 32;
-			}
-			else if(acc_res[1] < -0.4f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 16;
-			}
-			else if(acc_res[1] < -0.2f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 8;
-			}
-			else if(acc_res[1] < 0.2f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 6;
-			}
-			else if(acc_res[1] < 0.4f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 4;
-			}
-			else if(acc_res[1] < 0.65f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 3;
-			}
-			else if(acc_res[1] < 0.8f)
-			{
-				chopperTimer = I2S_AUDIOFREQ / 2;
-			}
-			else
-			{
-				chopperTimer = I2S_AUDIOFREQ;
-			}
-*/		}
-
-//		if (t_TIMING_BY_SAMPLE_EVERY_250_MS == 97) //4Hz
-//		{
-/*			if(acc_res[2] < -0.8f)
-			{
-				echo_dynamic_loop_length = ECHO_BUFFER_LENGTH;
-			}
-			else if((acc_res[2] > -0.7f) && (acc_res[2] < -0.4f))
-			{
-				echo_dynamic_loop_length = I2S_AUDIOFREQ;
-			}
-			else if((acc_res[2] > -0.3f) && (acc_res[2] < 0.3f))
-			{
-				echo_dynamic_loop_length = I2S_AUDIOFREQ / 2;
-			}
-			else if((acc_res[2] > 0.4f) && (acc_res[2] < 0.8f))
-			{
-				echo_dynamic_loop_length = I2S_AUDIOFREQ / 4;
-			}
-			else if(acc_res[2] > 0.9f)
-			{
-				echo_dynamic_loop_length = I2S_AUDIOFREQ / 8;
-				//echo_dynamic_loop_length = 0;
-			}
-*/
-//		}
-/*
-		if (t_TIMING_BY_SAMPLE_EVERY_250_MS == 99) //4Hz
-		{
-			if(echo_dynamic_loop_length0 < echo_dynamic_loop_length)
-			{
-				printf("Cleaning echo buffer from echo_dynamic_loop_length0 to echo_dynamic_loop_length\n");
-				//echo_length_updated = echo_dynamic_loop_length0;
-				//echo_dynamic_loop_length0 = echo_dynamic_loop_length;
-			//}
-			//if(echo_length_updated)
-			//{
-				//memset(echo_buffer+echo_dynamic_loop_length0*sizeof(int16_t),0,(echo_dynamic_loop_length-echo_dynamic_loop_length0)*sizeof(int16_t)); //clear memory
-				//echo_length_updated = 0;
-				echo_skip_samples = echo_dynamic_loop_length - echo_dynamic_loop_length0;
-				echo_skip_samples_from = echo_dynamic_loop_length0;
-			}
-			echo_dynamic_loop_length0 = echo_dynamic_loop_length;
 		}
-*/
 
-/*
-		if(short_press_volume_plus)
-		{
-			short_press_volume_plus = 0;
-		}
-		if(short_press_volume_minus)
-		{
-			short_press_volume_minus = 0;
-		}
-*/
 		if(event_channel_options)
 		{
 			echo_dynamic_loop_current_step++;
@@ -321,67 +229,16 @@ void channel_drum_kit()
 
 			echo_dynamic_loop_length = echo_dynamic_loop_steps[echo_dynamic_loop_current_step];
 
-			/*
-			if(echo_dynamic_loop_length==0)
-			{
-				PROG_add_echo = false; //turn echo off altogether
-			}
-			else
-			{
-				PROG_add_echo = true; //turn echo back on
-			}
-			*/
-
 			event_channel_options = 0;
 		}
 
-
-		//x-axis enables recording - when triggered, sample the data into the grain buffer (left channel first)
-		//if (ADC_last_result[1] > IR_sensors_THRESHOLD_1)
-
-		//always recording
-		//if(acc_res[0] > 0.4f)
-		{
-			//new_mixing_vol = 1.0f + (acc_res[0] - 0.4f) * 1.6f;
-
-			i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
-//			grain_left[sampleCounter1] = (int16_t)ADC_sample;
-        }
-
-        //mix samples for all voices (left channel)
-		//sample_mix = 0;
-		//sample_mix = (int16_t)ADC_sample;
-		//sample_mix += (int16_t)(sample_f[0]*MAIN_VOLUME*SAMPLE_VOLUME);
-
-		//if (TIMING_BY_SAMPLE_EVERY_100_MS == 45) //10Hz
-		//{
-			//printf("Granular: TIMING_BY_SAMPLE_EVERY_100_MS == 45, acc_res[0] = %f, current_chord = %d\n", acc_res[0], current_chord);
-
-		//}
-
-		//sample_mix = sample_mix /* * SAMPLE_VOLUME / 12.0f*/ * chopperEnv1; //apply volume
+		i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 
 		#ifdef DRUM_KIT_ECHO
 		sample32 = echo_dynamic_loop_length ? ((add_echo((int16_t)(sample_mix))) << 16) : (((int16_t)(sample_mix/2)) << 16);
 		#else
 		sample32 = ((int16_t)(sample_mix)) << 16;
 		#endif
-
-		//sample data into the right channel grain buffer, when x-axis triggered
-		//if (ADC_last_result[1] > IR_sensors_THRESHOLD_1)
-
-		//always recording
-		//if(acc_res[0] > 0.4f)
-        //{
-//			grain_right[sampleCounter2] = (int16_t)(ADC_sample>>16);
-        //}
-
-        //mix samples for all voices (right channel)
-        //sample_mix = 0;
-        //sample_mix = (int16_t)(ADC_sample>>16);
-		//sample_mix += (int16_t)(sample_f[1]*MAIN_VOLUME*SAMPLE_VOLUME);
-
-		//sample_mix = sample_mix /* * SAMPLE_VOLUME / 12.0f */ * chopperEnv2; //apply volume
 
         #ifdef DRUM_KIT_ECHO
         sample32 += echo_dynamic_loop_length ? (add_echo((int16_t)(sample_mix))) : (sample32 += (int16_t)(sample_mix/2));
@@ -400,8 +257,7 @@ void channel_drum_kit()
 		#endif
 
         //sample32 = 0; //ADC_sample; //test bypass all effects
-        i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
-        //i2s_push_sample(I2S_NUM, (char *)&ADC_sample, portMAX_DELAY); //test bypass
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 
-	}	//end while(1)
+	}	//while(!event_next_channel)
 }

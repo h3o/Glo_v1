@@ -1,16 +1,22 @@
 /*
  * Bytebeat.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jul 14 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
+ *
+ *  Bytebeat uses math formulas discovered by Viznut a.k.a. Ville-Matias Heikkilä and his friends.
+ *
+ *  Sources and more information: http://viznut.fi/en/
+ *                                http://viznut.fi/texts-en/bytebeat_algorithmic_symphonies.html
  *
  */
 

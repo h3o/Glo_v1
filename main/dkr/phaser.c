@@ -88,7 +88,7 @@ void PhaserFeedback(float fdb)
 	fb = fdb;
 }
 /*---------------------------------------------------------------------*/
-static float allpass(float yin, int ind)
+IRAM_ATTR static float allpass(float yin, int ind)
 {
 	float yout;
 
@@ -98,7 +98,7 @@ static float allpass(float yin, int ind)
 }
 
 /*---------------------------------------------------------------------*/
-float Phaser_compute(float xin)
+IRAM_ATTR float Phaser_compute(float xin)
 {
 	float yout;
 	int i;

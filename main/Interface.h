@@ -1,16 +1,17 @@
 /*
  * Interface.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 27, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -19,7 +20,7 @@
 
 #ifdef __cplusplus
 
-#include <dsp/Filters.h>
+#include "dsp/Filters.h"
 #include "notes.h"
 
 extern unsigned long seconds;
@@ -30,18 +31,6 @@ extern int progressive_rhythm_factor;
 
 extern float noise_volume, noise_volume_max, noise_boost_by_sensor, mixed_sample_volume;
 extern int special_effect, selected_song, selected_melody;
-
-//extern bool
-//	PROG_enable_filters,
-//	PROG_enable_rhythm,
-//	PROG_enable_chord_loop;//,
-	//PROG_add_echo,
-	//PROG_add_plain_noise,
-	//PROG_noise_effects;
-
-//extern bool
-//	TEST_enable_V1_control_voice,
-    //TEST_enable_V2_control_drum;
 
 #define FILTERS_TYPE_NO_FILTERS 0x00
 #define FILTERS_TYPE_LOW_PASS 0x01
@@ -62,10 +51,6 @@ extern int PROGRESS_UPDATE_FILTERS_RATE;
 
 extern int SHIFT_CHORD_INTERVAL;
 
-//extern int *current_chord_LEDs;
-//extern int current_melody_LED;
-//extern float current_melody_freq;
-
 extern Filters *fil;
 
 extern int direct_update_filters_id[FILTERS];
@@ -79,9 +64,7 @@ extern int arpeggiator_loop;
 extern int use_alt_settings;
 extern int use_binaural;
 
-//#ifdef __cplusplus
- extern "C" {
-//#endif
+extern "C" {
 
 void filters_init(float resonance);
 void program_settings_reset();
@@ -96,9 +79,7 @@ void randomize_song_and_melody();
 
 void transpose_song(int direction);
 
-//#ifdef __cplusplus
 }
-//#endif
 
 #else
 

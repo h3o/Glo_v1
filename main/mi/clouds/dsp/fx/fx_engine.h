@@ -146,29 +146,29 @@ class FxEngine {
     Context() { }
     ~Context() { }
     
-    inline void Load(float value) {
+    IRAM_ATTR inline void Load(float value) {
       accumulator_ = value;
     }
 
-    inline void Read(float value, float scale) {
+    IRAM_ATTR inline void Read(float value, float scale) {
       accumulator_ += value * scale;
     }
 
-    inline void Read(float value) {
+    IRAM_ATTR inline void Read(float value) {
       accumulator_ += value;
     }
 
-    inline void Write(float& value) {
+    IRAM_ATTR inline void Write(float& value) {
       value = accumulator_;
     }
 
-    inline void Write(float& value, float scale) {
+    IRAM_ATTR inline void Write(float& value, float scale) {
       value = accumulator_;
       accumulator_ *= scale;
     }
     
     template<typename D>
-    inline void Write(D& d, int32_t offset, float scale) {
+    IRAM_ATTR inline void Write(D& d, int32_t offset, float scale) {
       STATIC_ASSERT(D::base + D::length <= size, delay_memory_full);
       T w = DataType<format>::Compress(accumulator_);
       if (offset == -1) {
@@ -180,23 +180,23 @@ class FxEngine {
     }
     
     template<typename D>
-    inline void Write(D& d, float scale) {
+    IRAM_ATTR inline void Write(D& d, float scale) {
       Write(d, 0, scale);
     }
 
     template<typename D>
-    inline void WriteAllPass(D& d, int32_t offset, float scale) {
+    IRAM_ATTR inline void WriteAllPass(D& d, int32_t offset, float scale) {
       Write(d, offset, scale);
       accumulator_ += previous_read_;
     }
     
     template<typename D>
-    inline void WriteAllPass(D& d, float scale) {
+    IRAM_ATTR inline void WriteAllPass(D& d, float scale) {
       WriteAllPass(d, 0, scale);
     }
     
     template<typename D>
-    inline void Read(D& d, int32_t offset, float scale) {
+    IRAM_ATTR inline void Read(D& d, int32_t offset, float scale) {
       STATIC_ASSERT(D::base + D::length <= size, delay_memory_full);
       T r;
       if (offset == -1) {
@@ -210,22 +210,22 @@ class FxEngine {
     }
     
     template<typename D>
-    inline void Read(D& d, float scale) {
+    IRAM_ATTR inline void Read(D& d, float scale) {
       Read(d, 0, scale);
     }
     
-    inline void Lp(float& state, float coefficient) {
+    IRAM_ATTR inline void Lp(float& state, float coefficient) {
       state += coefficient * (accumulator_ - state);
       accumulator_ = state;
     }
 
-    inline void Hp(float& state, float coefficient) {
+    IRAM_ATTR inline void Hp(float& state, float coefficient) {
       state += coefficient * (accumulator_ - state);
       accumulator_ -= state;
     }
     
     template<typename D>
-    inline void Interpolate(D& d, float offset, float scale) {
+    IRAM_ATTR inline void Interpolate(D& d, float offset, float scale) {
       STATIC_ASSERT(D::base + D::length <= size, delay_memory_full);
       MAKE_INTEGRAL_FRACTIONAL(offset);
       float a = DataType<format>::Decompress(
@@ -238,7 +238,7 @@ class FxEngine {
     }
     
     template<typename D>
-    inline void Interpolate(
+    IRAM_ATTR inline void Interpolate(
         D& d, float offset, LFOIndex index, float amplitude, float scale) {
       STATIC_ASSERT(D::base + D::length <= size, delay_memory_full);
       offset += amplitude * lfo_value_[index];

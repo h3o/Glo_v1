@@ -1,31 +1,28 @@
 /*
- * filters.cpp
+ * v1_filters.cpp
+ *
+ *  Copyright 2024 Phonicbloom Ltd.
  *
  *  Created on: Apr 27, 2016
- *      Author: mayo
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
  */
+
 #include "v1_filters.h"
 #include "v1_freqs.h"
 #include "legacy.h"
 
 v1_filters::v1_filters(void)
 {
-	/*
-	//OLD filters!
-	fp.reso = 7; //9; //12; //6;
-	fp.gain = 128; //256;
-	//fp.gain = 1;
-	fp.volume_coef = 19.0f; //32.0f;
-	//fp.volume_f = fp.volume_coef/fp.gain;
-	fp.vol_ramp = 0.0f;
-	*/
-
-	//NEW filters!
-	//fp.reso2 = 0.96;
-	//fp.reso2 = 0.987;
 	fp.volume_f = 19.0f / 128.0f;
 	fp.reso2 = 0.99; //main test preset (v081)
-	//fp.reso2 = 0.999; //hammond organ
 
 	fp.enable_mixing_deltas = (ENABLE_MIXING_DELTAS == 1);
 
@@ -37,8 +34,7 @@ v1_filters::v1_filters(void)
 	fp.reso2lim[0] = 0.950;
 	fp.reso2lim[1] = 0.995;
 
-	//unsigned long vol_fadein = I2S_AUDIOFREQ * 2 * 5; //2 channels, 5 seconds ramp
-	//unsigned long vol_ramp_delay = 1; //3 sec delay before volume fades up
+	fp.arpeggiator_filter_pair = -1; //none by default
 
 	chord = new v1_Chord();
 	chord->parse_notes(chord->base_notes, chord->bases_parsed);
@@ -47,11 +43,7 @@ v1_filters::v1_filters(void)
 
 v1_filters::~v1_filters(void)
 {
-	//for(int i=0;i<FILTERS;i++)
-	//{
-	//delete iir2;
 	delete[] iir2;
-	//}
 	delete(chord);
 }
 
@@ -91,12 +83,7 @@ IRAM_ATTR void v1_filters::filter_setup02()
 	for(int i=0;i<FILTERS;i++)
 	{
 		iir2[i].setResonance(fp.reso2);
-		//iir2[i].setCutoff((float)v1_freqs[i%(FILTERS/2)] / (float)I2S_AUDIOFREQ * 2 * 2);
 		iir2[i].setCutoffAndLimits((float)v1_freqs[i%(FILTERS/2)] * FILTERS_FREQ_CORRECTION / (float)v1_I2S_AUDIOFREQ * 2 * 3);
-		//iir2[i].setCutoff(v1_freqs[i%(FILTERS/2)]);
-		//iir2[i].setResonance(12.8);
-		//iir2[i].setCutoff(0.5);
-		//iir2[i].setFilterMode(FilterSimpleIIR02::FILTER_MODE_BANDPASS);
 
 		if(fp.enable_mixing_deltas)
 		{
@@ -110,10 +97,6 @@ IRAM_ATTR void v1_filters::filter_setup02()
 		fp.mixing_deltas[i] = 0;
 		fp.cutoff2[i] = fp.cutoff2_default;
 	}
-	//iir2[0].setResonance(0.98);
-	//iir2[0].setCutoff(0.5);
-	//iir2[1].setResonance(0.99);
-	//iir2[1].setCutoff(0.4);
 
 	//calculate Feedback boundaries: ???
 	fp.feedback2 = 0.96;
@@ -162,20 +145,37 @@ IRAM_ATTR void v1_filters::progress_update_filters(v1_filters *fil, bool reset_b
 		return;
 	}
 
-	//at once
-	//for(update_filters_loop;update_filters_loop>0;)
-	//{
-
 	update_filters_loop--;
-	fil->iir2[update_filters_f[update_filters_loop]].setCutoffAndLimits(update_filters_freq[update_filters_loop] * FILTERS_FREQ_CORRECTION / (float)v1_I2S_AUDIOFREQ * 2 * 3);
+	int filter_n = update_filters_f[update_filters_loop];
 
-	/*
-	if(reset_buffers && update_filters_loop == 0)
+	if(filter_n >= 0) //something to update
 	{
-		for(int f=0;f<CHORD_MAX_VOICES*2;f++)
+		if(fp.arpeggiator_filter_pair >= 0 && (filter_n == fp.arpeggiator_filter_pair || filter_n == CHORD_MAX_VOICES + fp.arpeggiator_filter_pair)) //arpeggiator
 		{
-			fil->iir2[update_filters_f[f]].resetFilterBuffers();
+			fil->iir2[filter_n].setResonanceKeepFeedback(0.9998); //higher reso for arpeggiated voice
+			fil->iir2[filter_n].setCutoffAndLimits(update_filters_freq[update_filters_loop] * FILTERS_FREQ_CORRECTION / (float)v1_I2S_AUDIOFREQ * 2 * 3);
+			fil->iir2[filter_n].disturbFilterBuffers();
+		}
+		else //background chord
+		{
+			fil->iir2[filter_n].setCutoffAndLimits(update_filters_freq[update_filters_loop] * FILTERS_FREQ_CORRECTION / (float)v1_I2S_AUDIOFREQ * 2 * 3);
 		}
 	}
-	*/
+}
+
+IRAM_ATTR void v1_filters::add_to_update_filters_pairs(int filter_n, float freq)
+{
+	if(update_filters_loop>0)
+	{
+		//some filters haven't finished updating
+		//update_filters_loop = 0;
+	}
+
+	update_filters_f[update_filters_loop] = filter_n;
+	update_filters_freq[update_filters_loop] = freq;//*tuning_l/440.0f;;
+	update_filters_loop++;
+
+	update_filters_f[update_filters_loop] = filter_n + FILTERS/2; //second filter of the pair starts at FILTERS/2 position
+	update_filters_freq[update_filters_loop] = freq;//*tuning_r/440.0f;;
+	update_filters_loop++;
 }

@@ -1,11 +1,20 @@
 /*
- * DCO_synth.cpp
+ * v1_DCO_synth.cpp
  *
- *  Created on: 11 May 2017
- *      Author: mayo
+ *  Copyright 2024 Phonicbloom Ltd.
  *
- * Based on "The Tiny-TS Touch Synthesizer" by Janost 2016, Sweden
- * https://janostman.wordpress.com/the-tiny-ts-diy-touch-synthesizer/
+ *  Created on: May 11, 2017
+ *      Author: mario
+ *
+ *    Based on: "The Tiny-TS Touch Synthesizer" by Janost 2016, Sweden
+ *      Source: https://janostman.wordpress.com/the-tiny-ts-diy-touch-synthesizer/
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
  *
  */
 
@@ -19,6 +28,7 @@
 // GNU General Public License for more details.
 
 #include "v1_DCO_Synth.h"
+#include "hw/sdcard.h"
 
 #define USE_FAUX_22k_MODE
 
@@ -76,7 +86,14 @@ void v1_DCO_Synth::v1_init()
 
 void v1_DCO_Synth::v1_play_loop()
 {
-	while(1)
+	#define S_LPF_ALPHA_SETTINGS 5
+	float s_lpf_alphas[S_LPF_ALPHA_SETTINGS] = {0.06f, 0.12f, 1.0f, 0.0005f, 0.005f};
+	int s_lpf_alpha_setting = 0;
+	float S_LPF_ALPHA = s_lpf_alphas[s_lpf_alpha_setting]; //0.06f; //0.025f
+	float s_lpf[4] = {0,0,0,0};
+	int i;
+
+	while(!event_next_channel)
 	{
 		//-------------------- DCO block ------------------------------------------
 
@@ -116,42 +133,36 @@ void v1_DCO_Synth::v1_play_loop()
 		sample_i16 = (int16_t)DCO_output[0];
 		sample_i16 += echo_buffer[echo_buffer_ptr];
 
-		//while (!SPI_I2S_GetFlagStatus(CODEC_I2S, SPI_I2S_FLAG_TXE));
-		//SPI_I2S_SendData(CODEC_I2S, sample_i16);
 		sample32 = sample_i16 << 16;
 
 		sample_i16 = (int16_t)DCO_output[1];
 
-		//if(PROG_add_echo)
-		//{
-			//wrap the echo loop
-			echo_buffer_ptr0++;
-			if(echo_buffer_ptr0 >= echo_dynamic_loop_length)
-			{
-				echo_buffer_ptr0 = 0;
-			}
+		//wrap the echo loop
+		echo_buffer_ptr0++;
+		if(echo_buffer_ptr0 >= echo_dynamic_loop_length)
+		{
+			echo_buffer_ptr0 = 0;
+		}
 
-			echo_buffer_ptr = echo_buffer_ptr0 + 1;
-			if(echo_buffer_ptr >= echo_dynamic_loop_length)
-			{
-				echo_buffer_ptr = 0;
-			}
+		echo_buffer_ptr = echo_buffer_ptr0 + 1;
+		if(echo_buffer_ptr >= echo_dynamic_loop_length)
+		{
+			echo_buffer_ptr = 0;
+		}
 
-			//add echo from the loop
-			sample_i16 += echo_buffer[echo_buffer_ptr];
+		//add echo from the loop
+		sample_i16 += echo_buffer[echo_buffer_ptr];
 
-			//store result to echo, the amount defined by a fragment
-			echo_buffer[echo_buffer_ptr0] = sample_i16 * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
-		//}
+		//store result to echo, the amount defined by a fragment
+		echo_buffer[echo_buffer_ptr0] = sample_i16 * ECHO_MIXING_GAIN_MUL / ECHO_MIXING_GAIN_DIV;
 
-		//while (!SPI_I2S_GetFlagStatus(CODEC_I2S, SPI_I2S_FLAG_TXE));
-		//SPI_I2S_SendData(CODEC_I2S, sample_i16);
 		sample32 += sample_i16;
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
+		sd_write_sample(&sample32);
 
 		#ifdef USE_FAUX_22k_MODE
-		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample0, portMAX_DELAY);
-		i2s_push_sample(I2S_NUM, (char*)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
+		sd_write_sample(&sample32);
 		#endif
 
 		sampleCounter++;
@@ -160,6 +171,30 @@ void v1_DCO_Synth::v1_play_loop()
 		{
 			sampleCounter = 0;
 			seconds++;
+		}
+
+		ui_command = 0;
+
+		if (TIMING_EVERY_20_MS==31) //50Hz
+		{
+			#define DCO_UI_CMD_SET_ALPHA			1
+			//#define DCO_UI_CMD_RESERVED			2
+
+			if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_1) { ui_command = DCO_UI_CMD_SET_ALPHA; btn_event_ext = 0; }
+			//if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_2) { ui_command = DCO_UI_CMD_RESERVED; btn_event_ext = 0; }
+
+			if(ui_command==DCO_UI_CMD_SET_ALPHA)
+			{
+				s_lpf_alpha_setting++;
+				if(s_lpf_alpha_setting==S_LPF_ALPHA_SETTINGS)
+				{
+					s_lpf_alpha_setting = 0;
+				}
+				S_LPF_ALPHA = s_lpf_alphas[s_lpf_alpha_setting];
+				printf("v1_DCO_Synth(): S_LPF_ALPHA = %f\n", S_LPF_ALPHA);
+			}
+
+			ui_command = 0;
 		}
 
 		if (TIMING_EVERY_10_MS==0) //100Hz
@@ -181,16 +216,21 @@ void v1_DCO_Synth::v1_play_loop()
 			ENVamt = ir_res[3] * 16; /// 4;
 			*/
 
+			for(i=0;i<4;i++)
+			{
+				s_lpf[i] = s_lpf[i] + S_LPF_ALPHA * (ir_res[i] - s_lpf[i]);
+			}
+
 			#define DCO_FREQ_DEFAULT 32000
-			FREQ = (uint16_t)(ir_res[0] * DCO_FREQ_DEFAULT * 2);
+			FREQ = (uint16_t)(s_lpf[0] * DCO_FREQ_DEFAULT * 2);
 			//printf("FREQ=%d\n",FREQ);
-			DOUBLE = (uint8_t)(ir_res[1] * 256);
+			DOUBLE = (uint8_t)(s_lpf[1] * 256);
 			//printf("DOUBLE=%d\n",DOUBLE);
-			PHASEamt = (uint8_t)(ir_res[2] * 256);
+			PHASEamt = (uint8_t)(s_lpf[2] * 256);
 			//printf("PHASEamt=%d\n",PHASEamt);
-			ENVamt = (uint8_t)(ir_res[3] * 32);
+			ENVamt = (uint8_t)(s_lpf[3] * 32);
 			//printf("ENVamt=%d\n",ENVamt);
-			resonant_peak_mod_volume = (uint16_t)(ir_res[3] * 4096);
+			resonant_peak_mod_volume = (uint16_t)(s_lpf[3] * 4096);
 		}
 	}
 }

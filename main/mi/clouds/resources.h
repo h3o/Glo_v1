@@ -35,7 +35,7 @@
 
 
 #include "stmlib/stmlib.h"
-#include "esp32/include/esp_attr.h"
+#include "esp_attr.h"
 
 //#define CLOUDS_HARD_LIMITER_MIN 	-20000
 //#define CLOUDS_HARD_LIMITER_MAX 	20000

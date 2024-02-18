@@ -1,38 +1,39 @@
 /*
  * signals.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 27, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include "signals.h"
-#include "init.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-//-------------------------- sample and echo buffers -------------------
+#include "signals.h"
 
-//uint32_t ADC_sample;
-//uint32_t sample32;
+#include "init.h"
+#include "dsp/reverb.h"
+
+//-------------------------- sample and echo buffers -------------------
 
 volatile int16_t sample_i16 = 0;
 volatile uint16_t sample_u16 = 0;
 
 float sample_f[2],sample_mix,sample_lpf[4],sample_hpf[4];
 
-//int n_bytes, ADC_result;
 uint32_t ADC_sample, ADC_sample0;
-//int ADC_sample_valid = 0;
+uint32_t ADC_sampleA[ADC_SAMPLE_BUFFER];
+int ADC_sample_ptr;
 uint32_t sample32;
 
 int autocorrelation_rec_sample;
@@ -78,111 +79,63 @@ const int echo_dynamic_loop_steps[ECHO_DYNAMIC_LOOP_STEPS] = {
 int fixed_arp_level = 0;
 
 //int16_t reverb_buffer[REVERB_BUFFER_LENGTH];	//the buffer is allocated statically
-int16_t *reverb_buffer; //the buffer is allocated dynamically
+int16_t *reverb_buffer = NULL; 					//the buffer is allocated dynamically
 int reverb_buffer_ptr0, reverb_buffer_ptr;		//pointers for reverb buffer
 int reverb_dynamic_loop_length;
 float REVERB_MIXING_GAIN_MUL, REVERB_MIXING_GAIN_DIV;
 float reverb_mix_f;
 
-float SAMPLE_VOLUME = SAMPLE_VOLUME_DEFAULT; //9.0f; //12.0f; //0.375f;
+int16_t *reverb_buffer_ext[REVERB_BUFFERS_EXT] = {NULL,NULL};	//extra reverb buffers for higher and lower octaves
+int reverb_buffer_ptr0_ext[REVERB_BUFFERS_EXT], reverb_buffer_ptr_ext[REVERB_BUFFERS_EXT];	//pointers for reverb buffer
+int reverb_dynamic_loop_length_ext[REVERB_BUFFERS_EXT];
+float REVERB_MIXING_GAIN_MUL_EXT, REVERB_MIXING_GAIN_DIV_EXT;
+
+float SAMPLE_VOLUME = SAMPLE_VOLUME_DEFAULT;
 float limiter_coeff = DYNAMIC_LIMITER_COEFF_DEFAULT;
 
 float ADC_LPF_ALPHA = 0.2f; //up to 1.0 for max feedback = no filtering
 float ADC_HPF_ALPHA = 0.2f;
 
 //---------------------------------------------------------------------------
-
-double static b_noise = NOISE_SEED;
 uint32_t random_value;
-
-void reset_pseudo_random_seed()
-{
-	b_noise = NOISE_SEED;
-}
-
-void set_pseudo_random_seed(double new_value)
-{
-	//printf("set_pseudo_random_seed(%f)\n",new_value);
-	b_noise = new_value;
-}
-
-float PseudoRNG1a_next_float() //returns random float between -0.5f and +0.5f
-{
-/*
-	b_noise = b_noise * b_noise;
-	int i_noise = b_noise;
-	b_noise = b_noise - i_noise;
-
-	float b_noiseout;
-	b_noiseout = b_noise - 0.5;
-
-	b_noise = b_noise + 19;
-
-	return b_noiseout;
-*/
-	b_noise = b_noise + 19;
-	b_noise = b_noise * b_noise;
-	int i_noise = b_noise;
-	b_noise = b_noise - i_noise;
-	return b_noise - 0.5;
-}
-
-/*
-float PseudoRNG1b_next_float()
-{
-	double b_noiselast = b_noise;
-	b_noise = b_noise + 19;
-	b_noise = b_noise * b_noise;
-	b_noise = (b_noise + b_noiselast) * 0.5;
-	b_noise = b_noise - (int)b_noise;
-
-	return b_noise - 0.5;
-}
-
-uint32_t PseudoRNG2_next_int32()
-{
-	//http://musicdsp.org/showone.php?id=59
-	//Type : Linear Congruential, 32bit
-	//References : Hal Chamberlain, "Musical Applications of Microprocessors" (Posted by Phil Burk)
-	//Notes :
-	//This can be used to generate random numeric sequences or to synthesise a white noise audio signal.
-	//If you only use some of the bits, use the most significant bits by shifting right.
-	//Do not just mask off the low bits.
-
-	//Calculate pseudo-random 32 bit number based on linear congruential method.
-
-	//Change this for different random sequences.
-	static unsigned long randSeed = 22222;
-	randSeed = (randSeed * 196314165) + 907633515;
-	return randSeed;
-}
-*/
+double r_rand = NOISE_SEED;
+int i_rand;
 
 void new_random_value()
 {
-	float r = PseudoRNG1a_next_float();
-	memcpy(&random_value, &r, sizeof(random_value));
+	//random_value = esp_random();
+	r_rand = r_rand + 19;
+	r_rand = r_rand * r_rand;
+	i_rand = r_rand;
+	r_rand = r_rand - i_rand;
+	//return r_rand - 0.5f;
+	memcpy(&random_value,&r_rand,4);
 }
 
 int fill_with_random_value(char *buffer)
 {
-	float r = PseudoRNG1a_next_float();
-	memcpy(buffer, &r, sizeof(r));
-	return sizeof(r);
+	new_random_value();
+	memcpy(buffer, &random_value, sizeof(random_value));
+	return sizeof(random_value);
 }
 
-//this seems to be NOT a more optimal way of passing the value
-void PseudoRNG_next_value(uint32_t *buffer) //load next random value to the variable
+float PseudoRNG1a_next_float_new() //returns random float between -0.5f and +0.5f
 {
-	b_noise = b_noise * b_noise;
-	int i_noise = b_noise;
-	b_noise = b_noise - i_noise;
-	float b_noiseout = b_noise - 0.5;
-	b_noise = b_noise + NOISE_SEED;
-	memcpy(buffer, &b_noiseout, sizeof(b_noiseout));
+	r_rand = r_rand + 19;
+	r_rand = r_rand * r_rand;
+	i_rand = r_rand;
+	r_rand = r_rand - i_rand;
+	return r_rand - 0.5f;
 }
 
-//uint8_t test[10000]; //test for how much static memory is left
+float PseudoRNG1a_next_float_new01() //returns random float between 0.0f and +1.0f
+{
+	r_rand = r_rand + 19;
+	r_rand = r_rand * r_rand;
+	i_rand = r_rand;
+	r_rand = r_rand - i_rand;
+	return r_rand;
+}
 
 void init_echo_buffer()
 {
@@ -218,7 +171,7 @@ void deinit_echo_buffer()
 	#endif
 }
 
-int16_t add_reverb(int16_t sample)
+IRAM_ATTR int16_t add_reverb(int16_t sample)
 {
 	//wrap the reverb loop
 	reverb_buffer_ptr0++;
@@ -236,15 +189,8 @@ int16_t add_reverb(int16_t sample)
 	//add reverb from the loop
 	reverb_mix_f = (float)sample + (float)reverb_buffer[reverb_buffer_ptr] * REVERB_MIXING_GAIN_MUL / REVERB_MIXING_GAIN_DIV;
 
-	if (reverb_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER)
-	{
-		reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER;
-	}
-
-	if (reverb_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER)
-	{
-		reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER;
-	}
+	if (reverb_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER; }
+	if (reverb_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER; }
 
 	sample = (int16_t)reverb_mix_f;
 
@@ -254,11 +200,104 @@ int16_t add_reverb(int16_t sample)
 	//reverb_buffer[reverb_buffer_ptr0] = (int16_t)reverb_mix_f;
 
 	reverb_buffer[reverb_buffer_ptr0] = sample;
-
 	return sample;
 }
 
-int16_t add_echo(int16_t sample)
+/*
+IRAM_ATTR int16_t add_reverb_ext(int16_t sample)
+{
+	int16_t out_sample = 0;
+
+	for(int r=0;r<REVERB_BUFFERS_EXT;r++)
+	{
+		reverb_buffer_ptr0_ext[r]++;
+		if (reverb_buffer_ptr0_ext[r] >= reverb_dynamic_loop_length_ext[r])
+		{
+			reverb_buffer_ptr0_ext[r] = 0;
+		}
+
+		reverb_buffer_ptr_ext[r] = reverb_buffer_ptr0_ext[r] + 1;
+		if (reverb_buffer_ptr_ext[r] >= reverb_dynamic_loop_length_ext[r])
+		{
+			reverb_buffer_ptr_ext[r] = 0;
+		}
+
+		//add reverb from the loop
+		reverb_mix_f = (float)sample*REVERB_EXT_SAMPLE_INPUT_COEFF + (float)reverb_buffer_ext[r][reverb_buffer_ptr_ext[r]] * REVERB_MIXING_GAIN_MUL_EXT / REVERB_MIXING_GAIN_DIV_EXT;
+		reverb_mix_f *= REVERB_EXT_SAMPLE_OUTPUT_COEFF;
+
+		if (reverb_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER; }
+		if (reverb_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER; }
+
+		sample = (int16_t)reverb_mix_f;
+		reverb_buffer_ext[r][reverb_buffer_ptr0_ext[r]] = sample;
+
+		out_sample += sample;
+	}
+
+	return out_sample;
+}
+*/
+
+IRAM_ATTR int16_t add_reverb_ext_all3(int16_t sample)
+{
+	int32_t out_sample = 0;
+	float sample_f = ((float)sample) * REVERB_EXT_SAMPLE_INPUT_COEFF;
+
+	//wrap the reverb loop
+	reverb_buffer_ptr0++;
+	if (reverb_buffer_ptr0 >= reverb_dynamic_loop_length)
+	{
+		reverb_buffer_ptr0 = 0;
+	}
+
+	reverb_buffer_ptr = reverb_buffer_ptr0 + 1;
+	if (reverb_buffer_ptr >= reverb_dynamic_loop_length)
+	{
+		reverb_buffer_ptr = 0;
+	}
+
+	//add reverb from the loop
+	reverb_mix_f = sample_f + (float)reverb_buffer[reverb_buffer_ptr] * REVERB_MIXING_GAIN_MUL / REVERB_MIXING_GAIN_DIV;
+	reverb_mix_f *= REVERB_EXT_SAMPLE_OUTPUT_COEFF;
+
+	if (reverb_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER; }
+	if (reverb_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER; }
+
+	reverb_buffer[reverb_buffer_ptr0] = (out_sample = (int16_t)reverb_mix_f);
+
+	//add 2nd and 3rd buffer
+	for(int r=0;r<REVERB_BUFFERS_EXT;r++)
+	{
+		reverb_buffer_ptr0_ext[r]++;
+		if (reverb_buffer_ptr0_ext[r] >= reverb_dynamic_loop_length_ext[r])
+		{
+			reverb_buffer_ptr0_ext[r] = 0;
+		}
+
+		reverb_buffer_ptr_ext[r] = reverb_buffer_ptr0_ext[r] + 1;
+		if (reverb_buffer_ptr_ext[r] >= reverb_dynamic_loop_length_ext[r])
+		{
+			reverb_buffer_ptr_ext[r] = 0;
+		}
+
+		//add reverb from the loop
+		reverb_mix_f = sample_f + (float)reverb_buffer_ext[r][reverb_buffer_ptr_ext[r]] * REVERB_MIXING_GAIN_MUL_EXT / REVERB_MIXING_GAIN_DIV_EXT;
+		reverb_mix_f *= REVERB_EXT_SAMPLE_OUTPUT_COEFF;
+
+		if (reverb_mix_f > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER; }
+		if (reverb_mix_f < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER) { reverb_mix_f = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER; }
+
+		out_sample += (reverb_buffer_ext[r][reverb_buffer_ptr0_ext[r]] = (int16_t)reverb_mix_f);
+	}
+
+	if (out_sample > COMPUTED_SAMPLE_MIXING_LIMIT_UPPER_INT) { out_sample = COMPUTED_SAMPLE_MIXING_LIMIT_UPPER_INT; }
+	if (out_sample < COMPUTED_SAMPLE_MIXING_LIMIT_LOWER_INT) { out_sample = COMPUTED_SAMPLE_MIXING_LIMIT_LOWER_INT; }
+
+	return (int16_t)out_sample;
+}
+
+IRAM_ATTR int16_t add_echo(int16_t sample)
 {
 	if(echo_dynamic_loop_length)
 	{
@@ -315,7 +354,7 @@ int16_t add_echo(int16_t sample)
 	return sample;
 }
 
-int16_t reversible_echo(int16_t sample, int direction)
+IRAM_ATTR int16_t reversible_echo(int16_t sample, int direction)
 {
 	if(echo_dynamic_loop_length)
 	{

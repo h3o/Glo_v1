@@ -1,29 +1,34 @@
 /*
  * Bytebeat.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jul 14 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
+ *
+ *  Bytebeat uses math formulas discovered by Viznut a.k.a. Ville-Matias Heikkilä and his friends.
+ *
+ *  Sources and more information: http://viznut.fi/en/
+ *                                http://viznut.fi/texts-en/bytebeat_algorithmic_symphonies.html
  *
  */
 
-#include <Bytebeat.h>
-#include <Interface.h>
-#include <InitChannels.h>
-//#include <hw/codec.h>
-//#include <hw/signals.h>
-#include <hw/init.h>
-#include <hw/gpio.h>
-#include <hw/sdcard.h>
-#include <hw/leds.h>
 #include <string.h>
+
+#include "Bytebeat.h"
+#include "Interface.h"
+#include "InitChannels.h"
+#include "hw/init.h"
+#include "hw/gpio.h"
+#include "hw/sdcard.h"
+#include "hw/leds.h"
 
 #define BYTEBEAT_SONGS 8
 uint8_t bytebeat_song;
@@ -40,30 +45,13 @@ uint8_t stereo_mixing_step = 1; //default mixing 60:40
 uint8_t bytebeat_echo_on = 1;
 #endif
 
-void channel_bytebeat()
+IRAM_ATTR void channel_bytebeat()
 {
-	//#define BYTEBEAT_MCLK
-
 	#ifdef BOARD_WHALE
 	int bytebeat_echo_cycle = 4;
 	#endif
 
-	#define BYTEBEAT_MIXING_VOLUME 2.5f
-
-	#ifdef BYTEBEAT_MCLK
-	start_MCLK();
-	#endif
-	//codec_init(); //i2c init
-
-	/*
-	echo_dynamic_loop_length = I2S_AUDIOFREQ; //set default value (can be changed dynamically)
-	//echo_buffer = (int16_t*)malloc(echo_dynamic_loop_length*sizeof(int16_t)); //allocate memory
-	memset(echo_buffer,0,echo_dynamic_loop_length*sizeof(int16_t)); //clear memory
-	echo_buffer_ptr0 = 0; //reset pointer
-
-    ECHO_MIXING_GAIN_MUL = 1; //amount of signal to feed back to echo loop, expressed as a fragment
-    ECHO_MIXING_GAIN_DIV = 4; //e.g. if MUL=2 and DIV=3, it means 2/3 of signal is mixed in
-    */
+	#define BYTEBEAT_MIXING_VOLUME 4.5f
 
 	bytebeat_init();
 	#ifdef BOARD_WHALE
@@ -73,7 +61,7 @@ void channel_bytebeat()
 	sample32 = 0;
 	for(int i=0;i<I2S_AUDIOFREQ/2;i++)
 	{
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 	}
 
 	channel_running = 1;
@@ -83,11 +71,15 @@ void channel_bytebeat()
 	codec_set_digital_volume();
 	noise_volume_max = 1.0f;
 
+	sensors_active = 1;
+
 	while(!event_next_channel)
 	{
 		sample32 = bytebeat_next_sample();
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 		sd_write_sample(&sample32);
+
+		sampleCounter++;
 
 		ui_command = 0;
 
@@ -160,10 +152,6 @@ void channel_bytebeat()
 		}
 	}
 
-	#ifdef BYTEBEAT_MCLK
-	stop_MCLK();
-	#endif
-
 	channel_running = 0;
 }
 
@@ -191,7 +179,7 @@ void bytebeat_stereo_paning()
 	LED_R8_set_byte(stereo_mixing_step_indication[stereo_mixing_step]);
 }
 
-int16_t bytebeat_echo(int16_t sample)
+IRAM_ATTR int16_t bytebeat_echo(int16_t sample)
 {
 	if(echo_dynamic_loop_length)
 	{
@@ -237,9 +225,7 @@ void bytebeat_init()
 {
 	program_settings_reset();
 
-	//echo_dynamic_loop_length = I2S_AUDIOFREQ / 128; //set default value (can be changed dynamically)
 	echo_dynamic_loop_length = ECHO_BUFFER_LENGTH_DEFAULT; //set default value (can be changed dynamically)
-	//echo_buffer = (int16_t*)malloc(echo_dynamic_loop_length*sizeof(int16_t)); //allocate memory
 	memset(echo_buffer,0,echo_dynamic_loop_length*sizeof(int16_t)); //clear memory
 	echo_buffer_ptr0 = 0; //reset pointer
 
@@ -251,20 +237,48 @@ void bytebeat_init()
     bytebeat_song = 0;
     bytebeat_speed_div = 0;
 
+    LED_R8_set_byte(1<<bytebeat_song);
+
 	#ifdef BOARD_WHALE
     BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
 	#endif
 }
 
-uint32_t bytebeat_next_sample()
+IRAM_ATTR uint32_t bytebeat_next_sample()
 {
 	int tt[4];
 	unsigned char s[4];
 	float mix1 = 0, mix2 = 0;
 	uint16_t sample1, sample2;
 	uint32_t bb_sample;
+	static unsigned char sensor_p[4] = {0,0,0,0};
+	static float s_lpf[4] = {0,0,0,0};
+	#define S_LPF_ALPHA	0.06f
 
 	float stereo_mixing[STEREO_MIXING_STEPS] = {0.5f,0.4f,0.2f,0}; //50, 60, 80 and 100% mixing ratio
+
+	if (TIMING_EVERY_100_MS == 43) //10Hz
+	//if (TIMING_EVERY_250_MS == 43) //4Hz
+	{
+		for(int i=0;i<4;i++)
+		{
+			s_lpf[i] = s_lpf[i] + S_LPF_ALPHA * (ir_res[i] - s_lpf[i]);
+
+			//if(PARAMETER_CONTROL_SELECTED_IRS)
+			//{
+			if(ir_res[i] > IR_sensors_THRESHOLD_1)
+			{
+				sensor_p[i] = s_lpf[i]*100;
+				//printf("SENSOR_THRESHOLD_ORANGE_1, ir_res[1] = %f, sensor_p[1] = %d\n", ir_res[1], sensor_p[1]);
+			}
+			else
+			{
+				sensor_p[i] = 0;
+				//printf("SENSOR_THRESHOLD_ORANGE_1 NOT, sensor_p[1] = 0\n");
+			}
+			//}
+		}
+	}
 
 	/*	tt++;
 
@@ -313,8 +327,8 @@ uint32_t bytebeat_next_sample()
 
 		tt[1] = tt[0]/4;
 
-		s[0] = tt[0]*(tt[0]>>11&tt[0]>>8&123&tt[0]>>3);
-		s[1] = tt[1]*(tt[1]>>11&tt[1]>>8&123&tt[1]>>3);
+		s[0] = tt[0]*(tt[0]>>(11)&tt[0]>>(8-sensor_p[0]/5)&(123-sensor_p[2])&tt[0]>>(3+sensor_p[3]/10))*(sensor_p[1]+1);
+		s[1] = tt[1]*(tt[1]>>(11)&tt[1]>>(8-sensor_p[0]/5)&(123-sensor_p[2])&tt[1]>>(3+sensor_p[3]/10))*(sensor_p[1]+1);
 
 		mix1 = (float)s[0];
 		mix2 = (float)s[1];
@@ -327,13 +341,13 @@ uint32_t bytebeat_next_sample()
 		tt[1] = tt[0]/2;
 		//t[1] = t[0]/4;
 
-		tt[2] = bytebeat_song_ptr/3;
+		tt[2] = bytebeat_song_ptr/(3+sensor_p[2]/10);
 		tt[3] = tt[1]/2;
 
-		s[0] = (tt[0]*(tt[0]>>5|tt[0]>>8))>>(tt[0]>>16);
-		s[1] = (tt[1]*(tt[1]>>5|tt[1]>>8))>>(tt[1]>>16);
-		s[2] = (tt[2]*(tt[2]>>5|tt[2]>>8))>>(tt[2]>>16);
-		s[3] = (tt[3]*(tt[3]>>5|tt[3]>>8))>>(tt[3]>>16);
+		s[0] = (tt[0]*(tt[0]>>(5-sensor_p[0]/20)|tt[0]>>(8-sensor_p[1]/20)))>>(tt[0]>>(16-sensor_p[3]/10));
+		s[1] = (tt[1]*(tt[1]>>(5-sensor_p[0]/20)|tt[1]>>(8-sensor_p[1]/20)))>>(tt[1]>>(16-sensor_p[3]/10));
+		s[2] = (tt[2]*(tt[2]>>(5+sensor_p[0]/10)|tt[2]>>(8+sensor_p[1]/10)))>>(tt[2]>>(16-sensor_p[3]/10));
+		s[3] = (tt[3]*(tt[3]>>(5+sensor_p[0]/10)|tt[3]>>(8+sensor_p[1]/10)))>>(tt[3]>>(16-sensor_p[3]/10));
 
 		mix1 = (float)(s[0]+s[2]);
 		mix2 = (float)(s[1]+s[3]);
@@ -349,8 +363,8 @@ uint32_t bytebeat_next_sample()
 		//t[2] = t[1]/2;
 		//t[3] = t[2]/2;
 
-		s[0] = tt[0]*((tt[0]>>12|tt[0]>>8)&63&tt[0]>>4);
-		s[1] = tt[1]*((tt[1]>>12|tt[1]>>8)&63&tt[1]>>4);
+		s[0] = tt[0]*((tt[0]>>(12-sensor_p[0]/10)|tt[0]>>(8-sensor_p[1]/2))&(63-sensor_p[2])&tt[0]>>(4+sensor_p[3]/8));
+		s[1] = tt[1]*((tt[1]>>(12-sensor_p[0]/10)|tt[1]>>(8+sensor_p[1]/2))&(63-sensor_p[2])&tt[1]>>(4+sensor_p[3]/8));
 		//s[2] = t[2]*((t[2]>>12|t[2]>>8)&63&t[2]>>4);
 		//s[3] = t[3]*((t[3]>>12|t[3]>>8)&63&t[3]>>4);
 
@@ -365,8 +379,8 @@ uint32_t bytebeat_next_sample()
 
 		tt[1] = tt[0]/2;
 
-		s[0] = tt[0]*((tt[0]>>9|tt[0]>>13)&25&tt[0]>>6);
-		s[1] = tt[1]*((tt[1]>>9|tt[1]>>13)&25&tt[1]>>6);
+		s[0] = tt[0]*((tt[0]>>(9-sensor_p[0]/10)|tt[0]>>(13-sensor_p[1]/8))&(25-sensor_p[3]/4)&tt[0]>>(6-sensor_p[2]/20));
+		s[1] = tt[1]*((tt[1]>>(9-sensor_p[0]/10)|tt[1]>>(13-sensor_p[1]/8))&(25-sensor_p[3]/4)&tt[1]>>(6-sensor_p[2]/20));
 
 		mix1 = (float)s[0];
 		mix2 = (float)s[1];
@@ -378,9 +392,9 @@ uint32_t bytebeat_next_sample()
 		tt[1] = tt[0]/2;
 
 		#define t tt[0]
-		s[0] = ((-t&4095)*(255&t*(t&t>>13))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14));
+		s[0] = ((-t&4095)*(255&t*(t&t>>(13-sensor_p[0]/10)))>>(12-sensor_p[1]/10))+(127&t*(234&t>>8&t>>(3+sensor_p[2]/10))>>(3&t>>(14-sensor_p[3]/10)));
 		#define t tt[1]
-		s[1] = ((-t&4095)*(255&t*(t&t>>13))>>12)+(127&t*(234&t>>8&t>>3)>>(3&t>>14));
+		s[1] = ((-t&4095)*(255&t*(t&t>>(13-sensor_p[0]/10)))>>(12-sensor_p[1]/10))+(127&t*(234&t>>8&t>>(3+sensor_p[2]/10))>>(3&t>>(14-sensor_p[3]/10)));
 		#undef t
 
 		//s[0] = (t[0]*(t[0]>>8*(t[0]>>15|t[0]>>8)&(20|(t[0]>>19)*5>>t[0]|t[0]>>3));
@@ -420,9 +434,9 @@ uint32_t bytebeat_next_sample()
 
 		//combined:
 		#define t tt[0]
-		s[0] = (t*(t>>(((t>>9)|(t>>8)))&63&(t>>4))) + ((t^(t>>8))|(((t<<3)&56)^t));
+		s[0] = (t*(t>>(((t>>(9-sensor_p[1]/10))|(t>>8)))&(63-sensor_p[2]/2)&(t>>(4+sensor_p[3]/10)))) + ((t^(t>>8))|(((t<<3)&(56-sensor_p[0]/2))^t));
 		#define t tt[1]
-		s[1] = (t*(t>>(((t>>9)|(t>>8)))&63&(t>>4))) + ((t^(t>>8))|(((t<<3)&56)^t));
+		s[1] = (t*(t>>(((t>>(9-sensor_p[1]/10))|(t>>8)))&(63-sensor_p[2]/2)&(t>>(4+sensor_p[3]/10)))) + ((t^(t>>8))|(((t<<3)&(56-sensor_p[0]/2))^t));
 		#undef t
 
 		/*
@@ -499,9 +513,9 @@ uint32_t bytebeat_next_sample()
 
 		//cool bagpipe-like sound with rhythm
 		#define t tt[0]
-		s[0] = t*t*~((t>>16|t>>12)&215&~t>>8);
+		s[0] = (sensor_p[0]+1)*t*t*~((t>>(16)|t>>(12))/(sensor_p[2]+1)&215&~t>>(8+sensor_p[1]/2))/(sensor_p[3]+1);
 		#define t tt[1]
-		s[1] = t*t*~((t>>16|t>>12)&215&~t>>8);
+		s[1] = (sensor_p[0]+1)*t*t*~((t>>(16)|t>>(12))/(sensor_p[2]+1)&215&~t>>(8-sensor_p[1]/2))/(sensor_p[3]+1);
 		#undef t
 
 		mix1 = (float)s[0];
@@ -518,9 +532,9 @@ uint32_t bytebeat_next_sample()
 		//even has an ending! :D SWEET!
 
 		#define t tt[0]
-		s[0] = t*((t>>14|t>>9)&92&t>>5);
+		s[0] = t*((t>>(14-sensor_p[1]/7)|t>>(9-sensor_p[0]/11))&(92-sensor_p[3])&t>>(5+sensor_p[2]/10));
 		#define t tt[1]
-		s[1] = t*((t>>14|t>>9)&92&t>>5);
+		s[1] = t*((t>>(14-sensor_p[1]/7)|t>>(9-sensor_p[0]/11))&(92-sensor_p[3])&t>>(5+sensor_p[2]/10));
 		#undef t
 
 		mix1 = (float)s[0];
@@ -553,4 +567,3 @@ uint32_t bytebeat_next_sample()
 	//return ((uint32_t)s[0])<<7|(((uint32_t)s[1])<<23);
 	return bb_sample << 1;
 }
-

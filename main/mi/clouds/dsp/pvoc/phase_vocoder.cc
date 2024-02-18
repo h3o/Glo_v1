@@ -32,6 +32,8 @@
 
 #include "stmlib/utils/buffer_allocator.h"
 
+#include <stdio.h>
+
 namespace clouds {
 
 using namespace std;
@@ -56,6 +58,8 @@ void PhaseVocoder::Init(
   float* fft_buffer = allocator[0]->Allocate<float>(fft_size);
   float* ifft_buffer = allocator[num_channels_ - 1]->Allocate<float>(fft_size);
   
+  printf("PhaseVocoder::Init(): fft_buffer=%p, ifft_buffer=%p\n", fft_buffer, ifft_buffer);
+
   size_t num_textures = kMaxNumTextures;
   size_t texture_size = (fft_size >> 1) - kHighFrequencyTruncation;
   for (int32_t i = 0; i < num_channels_; ++i) {
@@ -82,7 +86,7 @@ void PhaseVocoder::Init(
   }
 }
 
-void PhaseVocoder::Process(
+IRAM_ATTR void PhaseVocoder::Process(
     const Parameters& parameters,
     const FloatFrame* input,
     FloatFrame* output, size_t size) {

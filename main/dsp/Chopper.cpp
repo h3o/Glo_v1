@@ -1,23 +1,24 @@
 /*
  * Chopper.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: 24 Dec 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <Chopper.h>
-#include <Accelerometer.h>
-#include <InitChannels.h>
-#include <MusicBox.h>
+#include "Chopper.h"
+#include "Accelerometer.h"
+#include "InitChannels.h"
+#include "MusicBox.h"
 
 #define CHOPPER_ECHO
 
@@ -152,7 +153,6 @@ void channel_chopper()
 			else if(acc_res[2] > 0.9f)
 			{
 				echo_dynamic_loop_length = I2S_AUDIOFREQ / 8;
-				//echo_dynamic_loop_length = 0;
 			}
 		}
 		if (t_TIMING_BY_SAMPLE_EVERY_250_MS == 99) //4Hz
@@ -186,20 +186,13 @@ void channel_chopper()
 		//if(acc_res[0] > 0.4f)
 		{
 			//new_mixing_vol = 1.0f + (acc_res[0] - 0.4f) * 1.6f;
-
-			i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+			i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
         }
 
         //mix samples for all voices (left channel)
 		//sample_mix = 0;
 		sample_mix = (int16_t)ADC_sample;
-
-		//if (TIMING_EVERY_100_MS == 45) //10Hz
-		//{
-
-		//}
-
-		sample_mix = sample_mix /* * SAMPLE_VOLUME / 12.0f*/ * chopperEnv1; //apply volume
+		sample_mix = sample_mix * chopperEnv1; //apply volume
 
 		#ifdef CHOPPER_ECHO
 		sample32 = (add_echo((int16_t)(sample_mix))) << 16;
@@ -211,7 +204,7 @@ void channel_chopper()
         //sample_mix = 0;
         //sample_mix = (int16_t)(ADC_sample>>16);
 
-        sample_mix = sample_mix /* * SAMPLE_VOLUME / 12.0f */ * chopperEnv2; //apply volume
+        sample_mix = sample_mix * chopperEnv2; //apply volume
 
         #ifdef CHOPPER_ECHO
         sample32 += add_echo((int16_t)(sample_mix));
@@ -230,8 +223,7 @@ void channel_chopper()
 		#endif
 
         //sample32 = 0; //ADC_sample; //test bypass all effects
-        i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
-        //i2s_push_sample(I2S_NUM, (char *)&ADC_sample, portMAX_DELAY); //test bypass
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 
-	}	//end while(1)
+	}	//while(!event_next_channel)
 }

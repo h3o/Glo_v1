@@ -1,21 +1,25 @@
 /*
- * gpio.h
+ * v1_gpio.c
+ *
+ *  Copyright 2024 Phonicbloom Ltd.
  *
  *  Created on: Jun 21, 2016
- *      Author: mayo
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
  */
 
 #ifndef V1_GPIO_H_
 #define V1_GPIO_H_
 
-//#include "stm32f4xx.h"
-//#include "stm32f4xx_it.h"
-//#include "stm32f4xx_rcc.h"
-//#include "stm32f4xx_gpio.h"
-
 #include <stdbool.h>
 
-//Defines
 #define LED_GREEN_ON   GPIOD->BSRRL = GPIO_Pin_12;
 #define LED_GREEN_OFF  GPIOD->BSRRH = GPIO_Pin_12;
 #define LED_ORANGE_ON   GPIOD->BSRRL = GPIO_Pin_13;
@@ -47,10 +51,6 @@
 #define LED_SR4_ON   GPIOC->BSRRH = GPIO_Pin_9;
 #define LED_SR4_OFF  GPIOC->BSRRL = GPIO_Pin_9;
 
-
-// struct to initialize GPIO pins
-//GPIO_InitTypeDef GPIO_InitStructure;
-
 #ifdef __cplusplus
  extern "C" {
 #endif
@@ -59,26 +59,12 @@ extern bool RedLED_state, OrangeLED_state;
 extern int led_RED_state, led_GREEN_state;
 extern int leds_RED_seq, leds_BLUE_seq;
 
-// --------------------------------------
-
-//exported vars
-//extern uint32_t sys_timer;
-//extern __IO uint32_t sys_timer;
-//extern __IO uint32_t sys_clock;
-
-/* Exported functions ------------------------------------------------------- */
-//void GPIO_Init_all();
-//void GPIO_Test_all();
-
 void LEDs_RED_next(int limit);
 void LEDs_RED_off();
 void LEDs_RED_reset();
 
 void LEDs_BLUE_next(int limit);
 void LEDs_BLUE_off();
-
-//void TimingDelay_Decrement(void);
-//void Delay(__IO uint32_t nTime);
 
 #ifdef __cplusplus
 }

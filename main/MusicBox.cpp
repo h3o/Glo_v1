@@ -1,27 +1,28 @@
 /*
  * MusicBox.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: May 30, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include "MusicBox.h"
-//#include <InitChannels.h>
-#include <Interface.h>
-#include "notes.h"
-#include "glo_config.h"
-#include <hw/leds.h>
 #include <ctype.h>
 #include <string.h>
+
+#include "MusicBox.h"
+#include "Interface.h"
+#include "glo_config.h"
+#include "hw/leds.h"
+#include "notes.h"
 
 const int MusicBox::expand_multipliers[MAX_VOICES_PER_CHORD][2] = {
 	/*
@@ -112,7 +113,6 @@ const int MusicBox::expand_multipliers4[MAX_VOICES_PER_CHORD][2] = { //for 4-not
 MusicBox::MusicBox(int song)
 {
 	use_melody = NULL;
-	//use_song = (char*)SONGS[(song-1) * 2];
 
 	#define PARSE_SONG_BUFFER 4000
 	char *song_buf = (char*)malloc(PARSE_SONG_BUFFER);
@@ -137,18 +137,12 @@ MusicBox::MusicBox(int song)
 	if(total_length==0)
 	{
 		printf("MusicBox(%d): could not find the song in config block\n", song);
-		//while(1); //halt
-		//free(song_buf);
-		//return;
 
 		//indiate error
 		indicate_context_setting(0xff, 4, 250);
 		esp_restart();
 	}
 
-	//base_notes = (char*)malloc(strlen(use_song) * sizeof(char) + 1);
-	//memcpy(base_notes, use_song, strlen(use_song) * sizeof(char));
-	//base_notes[strlen(use_song) * sizeof(char)] = 0;
 	base_notes = (char*)malloc(strlen(song_buf) * sizeof(char) + 1);
 	memcpy(base_notes, song_buf, strlen(song_buf) * sizeof(char));
 	base_notes[strlen(song_buf) * sizeof(char)] = 0;
@@ -221,7 +215,7 @@ void MusicBox::generate(int max_voices, int allocate_freqs) {
 	printf("MusicBox::generate(): total chords = %d\n", total_chords);
 
 	int c,t;
-	//float test;
+
 	for(c=0;c<total_chords;c++)
 	{
 		chords[c].tones = max_voices;
@@ -236,19 +230,10 @@ void MusicBox::generate(int max_voices, int allocate_freqs) {
 			if(expand_multipliers[t][1] > 0)
 			{
 				chords[c].freqs[t] = bases_parsed[3*c + expand_multipliers[t][0]] * (float)expand_multipliers[t][1];
-				//test = chords[c].freqs[t];
-				//test++;
-
-				//if(chords[c].freqs[t] > 2000.0f)
-				//{
-				//	chords[c].freqs[t] /= 2.0f;
-				//}
 			}
 			else
 			{
 				chords[c].freqs[t] = bases_parsed[3*c + expand_multipliers[t][0]] / (float)(-expand_multipliers[t][1]);
-				//test = chords[c].freqs[t];
-				//test++;
 			}
 		}
 	}
@@ -313,21 +298,6 @@ int MusicBox::get_song_total_melody_notes(char *melody)
 	return notes;
 }
 
-/*
-void Chord::clear_old_song_and_melody()
-{
-	if(use_song!=NULL)
-	{
-		free(use_song); //free memory that was allocated by encode_temp_song_to_notes()
-		use_song = NULL;
-	}
-	if(use_melody!=NULL)
-	{
-		free(use_melody);
-		use_melody = NULL;
-	}
-}
-*/
 extern const int8_t LED_translate_table[];
 
 void MusicBox::transpose_song(int direction)

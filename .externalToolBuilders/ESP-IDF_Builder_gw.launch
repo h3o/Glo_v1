@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.eclipse.ui.externaltools.ProgramBuilderLaunchConfigurationType">
+<mapAttribute key="org.eclipse.debug.core.environmentVariables">
+<mapEntry key="IDF_PATH" value="e:\dev\ESP32\esp-idf"/>
+        <mapEntry key="PATH" value="E:\dev\espressif\tools\xtensa-esp32-elf\esp-2021r2-patch5-8.4.0\xtensa-esp32-elf\bin;E:\dev\espressif\tools\xtensa-esp32s2-elf\esp-2021r2-patch5-8.4.0\xtensa-esp32s2-elf\bin;E:\dev\espressif\tools\xtensa-esp32s3-elf\esp-2021r2-patch5-8.4.0\xtensa-esp32s3-elf\bin;E:\dev\espressif\tools\riscv32-esp-elf\esp-2021r2-patch5-8.4.0\riscv32-esp-elf\bin;E:\dev\espressif\tools\esp32ulp-elf\2.28.51-esp-20191205\esp32ulp-elf-binutils\bin;E:\dev\espressif\tools\esp32s2ulp-elf\2.28.51-esp-20191205\esp32s2ulp-elf-binutils\bin;E:\dev\espressif\tools\cmake\3.23.1\bin;E:\dev\espressif\tools\openocd-esp32\v0.11.0-esp32-20220411\openocd-esp32\bin;E:\dev\espressif\tools\idf-exe\1.0.3\;E:\dev\espressif\tools\ccache\4.3\ccache-4.3-windows-64;E:\dev\espressif\tools\dfu-util\0.9\dfu-util-0.9-win64;E:\dev\ESP32\esp-idf\tools;E:\dev\espressif\tools\ninja\1.10.2"/>
+</mapAttribute>
+<booleanAttribute key="org.eclipse.debug.ui.ATTR_LAUNCH_IN_BACKGROUND" value="false"/>
+    <stringAttribute key="org.eclipse.ui.externaltools.ATTR_LOCATION" value="E:\dev\Espressif\python_env\idf4.4_py3.8_env\Scripts\python.exe"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_RUN_BUILD_KINDS" value="full,incremental,"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_TOOL_ARGUMENTS" value="E:\dev\ESP32\esp-idf\tools\idf.py build"/>
+<booleanAttribute key="org.eclipse.ui.externaltools.ATTR_TRIGGERS_CONFIGURED" value="true"/>
+<stringAttribute key="org.eclipse.ui.externaltools.ATTR_WORKING_DIRECTORY" value="${workspace_loc:/whale-v150}"/>
+</launchConfiguration>

@@ -1,7 +1,20 @@
+
+	//#define IIR_FILTERS_PERFORMANCE_TEST
+
+	#ifdef IIR_FILTERS_PERFORMANCE_TEST
+	float t0 = micros();
+	//#define PERFORMANCE_TEST_NO_DATA_TO_CODEC
+	//#define PERFORMANCE_TEST_NO_DATA_TO_SD_CARD
+	//#define PERFORMANCE_TEST_SHOW_READ_BYTES
+	#endif
+
 	while(!event_next_channel || beats_selected)
     {
 		//t_TIMING_BY_SAMPLE_EVERY_125_MS = TIMING_EVERY_125_MS;
 		t_TIMING_BY_SAMPLE_EVERY_250_MS = TIMING_EVERY_250_MS;
+
+		ADC_sample = ADC_sampleA[ADC_sample_ptr];
+		ADC_sample_ptr++;
 
 		if(ADC_LR_ENABLED_L)
 		{
@@ -15,16 +28,25 @@
 		if(use_bg_sample)
 		{
 			sample_f[0] += ( (float)(32768 - (int16_t)mixed_sample_buffer[mixed_sample_buffer_ptr_L++]) / 32768.0f) * mixed_sample_volume;
-
-			if(mixed_sample_buffer_ptr_L == MIXED_SAMPLE_BUFFER_LENGTH)
+			if(load_SD_card_sample==SD_CARD_SAMPLE_OPENED)
+			{
+				mixed_sample_buffer_ptr_L++;
+			}
+	
+			//if(mixed_sample_buffer_ptr_L == MIXED_SAMPLE_BUFFER_LENGTH)
+			if(mixed_sample_buffer_ptr_L >= MIXED_SAMPLE_BUFFER_LENGTH)
 			{
 				mixed_sample_buffer_ptr_L = 0;
-				SD_card_sample_buffer_half = 2; //trigger reload of the 2nd buffer half
+				//SD_card_sample_buffer_half = 2; //trigger reload of the 2nd buffer half
+				if(load_SD_card_sample==SD_CARD_SAMPLE_OPENED)
+				{
+					mixed_sample_buffer_ptr_L = 1;
+				}
 			}
-			else if(mixed_sample_buffer_ptr_L == MIXED_SAMPLE_BUFFER_LENGTH/2)
-			{
-				SD_card_sample_buffer_half = 1; //trigger reload of the 1st buffer half
-			}			
+			//else if(mixed_sample_buffer_ptr_L == MIXED_SAMPLE_BUFFER_LENGTH/2)
+			//{
+			//	SD_card_sample_buffer_half = 1; //trigger reload of the 1st buffer half
+			//}						
 		}
 		else
 		{
@@ -115,11 +137,25 @@
 		if(use_bg_sample)
 		{
 			sample_f[1] += ( (float)(32768 - (int16_t)mixed_sample_buffer[mixed_sample_buffer_ptr_R++]) / 32768.0f) * mixed_sample_volume;
+			if(load_SD_card_sample==SD_CARD_SAMPLE_OPENED)
+			{
+				mixed_sample_buffer_ptr_R++;
+			}
 
 			if(mixed_sample_buffer_ptr_R == MIXED_SAMPLE_BUFFER_LENGTH)
+			//if(mixed_sample_buffer_ptr_R >= MIXED_SAMPLE_BUFFER_LENGTH)
 			{
+				SD_card_sample_buffer_half = 2; //trigger reload of the 2nd buffer half
 				mixed_sample_buffer_ptr_R = 0;
+				//if(load_SD_card_sample==SD_CARD_SAMPLE_OPENED)
+				//{
+				//	mixed_sample_buffer_ptr_R = 1;
+				//}
 			}
+			else if(mixed_sample_buffer_ptr_R == MIXED_SAMPLE_BUFFER_LENGTH/2)
+			{
+				SD_card_sample_buffer_half = 1; //trigger reload of the 1st buffer half
+			}						
 		}
 		else
 		{
@@ -205,10 +241,38 @@
 		}
 		#endif
 
-	    i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
-	    sd_write_sample(&sample32);
+	    //register size_t i2s_bytes_rw;
 
-		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		#ifndef PERFORMANCE_TEST_NO_DATA_TO_CODEC
+	    i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
+		#endif
+
+		#ifndef PERFORMANCE_TEST_NO_DATA_TO_SD_CARD
+		#ifdef SD_WRITE_ENABLED
+		sd_write_sample(&sample32);
+		#endif
+		#endif
+
+		#ifndef PERFORMANCE_TEST_NO_DATA_TO_CODEC
+
+		//if(adc_delay)
+		//{
+		//	adc_delay--;
+		//}
+		//else
+		//if(sampleCounter%ADC_SAMPLE_BUFFER==0)
+		if(ADC_sample_ptr==ADC_SAMPLE_BUFFER)
+		{
+			//i2s_read(I2S_NUM, (void*)&ADC_sample, 4*40, &i2s_bytes_rw, 0);//portMAX_DELAY);
+			i2s_read(I2S_NUM, (void*)ADC_sampleA, 4*ADC_SAMPLE_BUFFER, &i2s_bytes_rw, 1);
+			ADC_sample_ptr = 0;
+
+			#ifdef PERFORMANCE_TEST_SHOW_READ_BYTES
+			printf("%d-",i2s_bytes_rw);
+			#endif
+		}
+
+		#endif
 
 		if(use_direct_waves_filters)
 		{
@@ -257,7 +321,7 @@
 				if(!midi_override)
 				{
 					#ifdef BOARD_GECHO
-					display_chord(fil->chord->get_current_chord_LED(), 3);
+					display_chord(fil->musicbox->get_current_chord_LED(), 3);
 					#endif
 					fil->start_next_chord(wind_voices);
 				}
@@ -307,25 +371,25 @@
 					{
 						fil->add_to_update_filters_pairs(
 							fil->fp.arpeggiator_filter_pair,
-							fil->chord->midi_chords_expanded[arpeggiator_loop],
+							fil->musicbox->midi_chords_expanded[arpeggiator_loop],
 							fil->fp.tuning_arp_l, 
 							fil->fp.tuning_arp_r);
 					}
 					else
 					{
-						int next_chord = fil->chord->current_chord-1;
-						if(next_chord > fil->chord->total_chords)
+						int next_chord = fil->musicbox->current_chord-1;
+						if(next_chord > fil->musicbox->total_chords)
 						{
 							next_chord = 0;
 						}
 						else if(next_chord < 0)
 						{
-							next_chord = fil->chord->total_chords-1;
+							next_chord = fil->musicbox->total_chords-1;
 						}
 
 						//BUG!!
 						//fil->add_to_update_filters_pairs(0,fil->chord->chords[next_chord].freqs[arpeggiator_loop]);
-						fil->add_to_update_filters_pairs(fil->fp.arpeggiator_filter_pair,fil->chord->chords[next_chord].freqs[arpeggiator_loop], fil->fp.tuning_arp_l, fil->fp.tuning_arp_r);
+						fil->add_to_update_filters_pairs(fil->fp.arpeggiator_filter_pair,fil->musicbox->chords[next_chord].freqs[arpeggiator_loop], fil->fp.tuning_arp_l, fil->fp.tuning_arp_r);
 					}
 
 					arpeggiator_loop++;
@@ -380,7 +444,7 @@
 			if(!MIDI_controllers_active_PB)
 			{
 				//map accelerometer values of y-axis (-1..1) to sample mixing volume (0..1)
-				mixed_sample_volume = SENSOR_SAMPLE_MIX_VOL * mixed_sample_volume_coef;
+				mixed_sample_volume = SENSOR_SAMPLE_MIX_VOL * mixed_sample_volume_coef_ext;
 			}
 
 			if(use_direct_waves_filters && !lock_sensors)
@@ -773,9 +837,16 @@
 
 		if(tempoCounter==0) //one full second passed
     	{
-    		seconds++;
+			//printf("sampleCounter reset at %d, ADC_sample_ptr = %d\n", sampleCounter, ADC_sample_ptr);
+
+			seconds++;
     		sampleCounter = 0;
 			tempoCounter = TEMPO_BY_SAMPLE;
+
+			#ifdef IIR_FILTERS_PERFORMANCE_TEST
+			printf("s=%d, 1s worth of samples generated in: %f\n", sample32, micros() - t0);
+			t0 = micros();
+			#endif
 
 			#ifdef BOARD_WHALE
 			check_auto_power_off();

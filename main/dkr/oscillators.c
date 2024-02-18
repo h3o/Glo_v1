@@ -75,7 +75,7 @@ void	Drifter_centralFreq_set(uint8_t val)
 	centralFreq = Lin2Exp(val, 1, 6000);
 }
 /*---------------------------------------------------------------*/
-float_t Drifters_sampleCompute(void)
+IRAM_ATTR float_t Drifters_sampleCompute(void)
 {
 	float y;
 
@@ -100,7 +100,7 @@ void FM_op_modInd_set(Oscillator_t *op, uint8_t val)
 	op->modInd = (1.4f * val / MIDI_MAX) * (1.4f * val / MIDI_MAX);
 }
 /*-----------------------------------------------------------------------------------------------*/
-float_t FM1_sampleCompute(void) // op4 -> op3 -> op2 -> op1 => sound
+IRAM_ATTR float_t FM1_sampleCompute(void) // op4 -> op3 -> op2 -> op1 => sound
 {
 	Osc_WT_SINE_SampleCompute(&op4); // The result is in op4.out !
 	op3.phase += op3.modInd * op4.out;
@@ -113,7 +113,7 @@ float_t FM1_sampleCompute(void) // op4 -> op3 -> op2 -> op1 => sound
 	return op1.out;
 }
 /*-----------------------------------------------------------------------------------------------*/
-float_t FM2_sampleCompute(float frq) //  (op2 -> op1) + (op4 -> op3) => sound
+IRAM_ATTR float_t FM2_sampleCompute(float frq) //  (op2 -> op1) + (op4 -> op3) => sound
 {
 	float in;
 	op1.freq = frq;
@@ -128,7 +128,7 @@ float_t FM2_sampleCompute(float frq) //  (op2 -> op1) + (op4 -> op3) => sound
 	return  0.5f * (op1.out + op3.out);
 }
 /*----------------------------------------------------------------------------------------------*/
-float_t OpSampleCompute0(Oscillator_t * op) // accurate sine
+IRAM_ATTR float_t OpSampleCompute0(Oscillator_t * op) // accurate sine
 {
 	float_t z;
 
@@ -144,7 +144,7 @@ float_t OpSampleCompute0(Oscillator_t * op) // accurate sine
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t Osc_WT_SINE_SampleCompute(Oscillator_t * op) // basic wave table sine
+IRAM_ATTR float_t Osc_WT_SINE_SampleCompute(Oscillator_t * op) // basic wave table sine
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -157,7 +157,7 @@ float_t Osc_WT_SINE_SampleCompute(Oscillator_t * op) // basic wave table sine
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t Osc_FM_sine_SampleCompute(Oscillator_t * op, float FMinput) // basic wave table sine with FM
+IRAM_ATTR float_t Osc_FM_sine_SampleCompute(Oscillator_t * op, float FMinput) // basic wave table sine with FM
 {
 
 	op->phase += _2PI * Ts * op->freq + op->modInd * FMinput; // increment phase
@@ -169,7 +169,7 @@ float_t Osc_FM_sine_SampleCompute(Oscillator_t * op, float FMinput) // basic wav
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute7bis(Oscillator_t * op) // basic wave table positive sine : 0 < output < op.amp
+IRAM_ATTR float_t OpSampleCompute7bis(Oscillator_t * op) // basic wave table positive sine : 0 < output < op.amp
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -182,7 +182,7 @@ float_t OpSampleCompute7bis(Oscillator_t * op) // basic wave table positive sine
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute1(Oscillator_t * op) // basic sawtooth^2
+IRAM_ATTR float_t OpSampleCompute1(Oscillator_t * op) // basic sawtooth^2
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -196,7 +196,7 @@ float_t OpSampleCompute1(Oscillator_t * op) // basic sawtooth^2
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute2(Oscillator_t * op) // basic sawtooth
+IRAM_ATTR float_t OpSampleCompute2(Oscillator_t * op) // basic sawtooth
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -210,7 +210,7 @@ float_t OpSampleCompute2(Oscillator_t * op) // basic sawtooth
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute3(Oscillator_t * op) // sin(phi)^5
+IRAM_ATTR float_t OpSampleCompute3(Oscillator_t * op) // sin(phi)^5
 {
 	float_t z;
 
@@ -226,7 +226,7 @@ float_t OpSampleCompute3(Oscillator_t * op) // sin(phi)^5
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute4(Oscillator_t * op) // Complex waveform : +/- |sin(phi)|^alpha(freq), tends to a sine at high freqs
+IRAM_ATTR float_t OpSampleCompute4(Oscillator_t * op) // Complex waveform : +/- |sin(phi)|^alpha(freq), tends to a sine at high freqs
 {
 	float_t z, x, alpha;
 
@@ -253,7 +253,7 @@ float_t OpSampleCompute4(Oscillator_t * op) // Complex waveform : +/- |sin(phi)|
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute5(Oscillator_t * op) // Naive Triangle
+IRAM_ATTR float_t OpSampleCompute5(Oscillator_t * op) // Naive Triangle
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -267,7 +267,7 @@ float_t OpSampleCompute5(Oscillator_t * op) // Naive Triangle
 	return op->out;
 }
 /*-------------------------------------------------------*/
-float_t OpSampleCompute6(Oscillator_t * op) // Morphing sawtooth, tends to a triangle at high freqs
+IRAM_ATTR float_t OpSampleCompute6(Oscillator_t * op) // Morphing sawtooth, tends to a triangle at high freqs
 {
 	while (op->phase < 0) // keep phase in [0, 2pi]
 		op->phase += _2PI;
@@ -298,7 +298,7 @@ float_t OpSampleCompute8(Oscillator_t * op) // naive square
 	return op->out;
 }
 /*-------------------------------------------------------*/
-void AdditiveGen_newWaveform(void) //
+IRAM_ATTR void AdditiveGen_newWaveform(void) //
 {
 	uint8_t k;
 
@@ -314,7 +314,7 @@ void AdditiveGen_newWaveform(void) //
 	a[0] = 1.f / a[0];
 }
 /*-------------------------------------------------------*/
-float_t AdditiveGen_SampleCompute(Oscillator_t * op) // additive sine generator
+IRAM_ATTR float_t AdditiveGen_SampleCompute(Oscillator_t * op) // additive sine generator
 {
 	uint8_t k = 1;
 	float_t y = 0;
@@ -338,7 +338,7 @@ float_t AdditiveGen_SampleCompute(Oscillator_t * op) // additive sine generator
 
 /*-------------------------------------------------------------------------------------------------------------------*/
 
-float waveCompute(uint8_t sound, float frq)
+IRAM_ATTR float waveCompute(uint8_t sound, float frq)
 {
 	float y;
 

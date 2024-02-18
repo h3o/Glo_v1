@@ -1,24 +1,26 @@
 /*
  * Chaos.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Dec 28, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include "chaos.h"
-#include <notes.h>
-#include <hw/signals.h>
 #include <string.h>
 #include <stdlib.h>
+
+#include "chaos.h"
+#include "notes.h"
+#include "hw/signals.h"
 
 const char *possible_chords = "cdefgabCDEFGABjklmnJKLMN";
 
@@ -165,7 +167,11 @@ int generate_chord_progression(char **progression_buffer)
 	for(int n_fragment=0; n_fragment < total_fragments; n_fragment++)
 	{
 		const char *selected_fragment = nice_fragments[possible_fragment_order[nice_fragment_n][n_fragment] - 1];
-		strncpy(shuffled_chords+shuffled_chords_ptr, selected_fragment, strlen(selected_fragment));
+
+		//error: 'strncpy' output truncated before terminating nul copying as many bytes from a string as its length [-Werror=stringop-truncation]
+		//strncpy(shuffled_chords+shuffled_chords_ptr, selected_fragment, strlen(selected_fragment));
+		strcpy(shuffled_chords+shuffled_chords_ptr, selected_fragment);
+
 		shuffled_chords_ptr += strlen(selected_fragment);
 	}
 	/*
@@ -264,6 +270,6 @@ int get_melody_fragment(char *chord, char *buffer)
 		//return strlen(melody_fragments_major[melody_fragment_n]);
 		return translate_intervals_to_notes(buffer,chord[0],(char *)melody_fragments_major[melody_fragment_n]);
 	}
+
 	return 0;
 }
-

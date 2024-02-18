@@ -1,16 +1,17 @@
 /*
  * ui.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Nov 5, 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -32,6 +33,7 @@ extern int ui_command;
 extern int ui_ignore_events;
 extern int ui_button3_enabled;
 extern int ui_button4_enabled;
+extern int context_menu_enabled;
 
 // ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -148,11 +150,11 @@ extern int use_acc_or_ir_sensors;
 #define MAIN_MENU_SAMPLING_RATE_LEVEL	MAIN_MENU_LEVEL_2
 #define MAIN_MENU_SAMPLING_RATE_BTN		BUTTON_4
 
-//#define MAIN_MENU_RESERVED_LEVEL		MAIN_MENU_LEVEL_3
-//#define MAIN_MENU_RESERVED_BTN			BUTTON_1
+#define MAIN_MENU_MIDI_CTRL_SETUP_LEVEL	MAIN_MENU_LEVEL_3
+#define MAIN_MENU_MIDI_CTRL_SETUP_BTN	BUTTON_1
 
-//#define MAIN_MENU_RESERVED_LEVEL		MAIN_MENU_LEVEL_3
-//#define MAIN_MENU_RESERVED_BTN			BUTTON_2
+#define MAIN_MENU_MIDI_CTRL_RESET_LEVEL	MAIN_MENU_LEVEL_3
+#define MAIN_MENU_MIDI_CTRL_RESET_BTN	BUTTON_2
 
 #define MAIN_MENU_MIDI_SYNC_MODE_LEVEL	MAIN_MENU_LEVEL_3
 #define MAIN_MENU_MIDI_SYNC_MODE_BTN	BUTTON_3
@@ -246,8 +248,6 @@ void process_buttons_controls_gecho(void *pvParameters);
 void process_buttons_controls_whale(void *pvParameters);
 #endif
 void context_menu_action(int level, int direction);
-
-//void voice_menu_say(const char *item, voice_menu_t *items, int total_items);
 
 #ifdef BOARD_GECHO
 uint64_t select_channel();

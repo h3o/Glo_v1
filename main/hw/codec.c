@@ -1,6 +1,8 @@
 /*
  * codec.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 6, 2016
  *      Author: mario
  *
@@ -8,18 +10,18 @@
  * http://www.ti.com/product/TLV320AIC3104/technicaldocuments
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
 #include "codec.h"
 #include <hw/gpio.h>
 #include <hw/init.h>
+#include <hw/signals.h>
 #include <hw/ui.h>
 #include <string.h>
 
@@ -38,9 +40,9 @@ int mics_off = 0;
 uint8_t ADC_input_select = ADC_INPUT_DEFAULT; //mics by default
 uint8_t ADC_LR_enabled = ADC_LR_BOTH_ENABLED;
 
-int codec_analog_volume;// = CODEC_ANALOG_VOLUME_DEFAULT;
-int codec_digital_volume;// = CODEC_DIGITAL_VOLUME_DEFAULT;
-int codec_volume_user;// = CODEC_DIGITAL_VOLUME_DEFAULT;
+int codec_analog_volume;
+int codec_digital_volume;
+int codec_volume_user;
 
 uint8_t codec_ADC_volumes[6];
 
@@ -56,7 +58,6 @@ uint8_t codec_ADC_volume_CURRENT_ACTIVE_R;
 
 const int8_t AGC_levels[AGC_LEVELS] = {0, -5, -8, -10, -12, -14, -17, -20, -24};
 const uint8_t AGC_levels_indication[AGC_LEVELS] = {0x00,0x10,0x80,0x01,0x03,0x09,0x41,0x02,0x0a};
-//uint8_t AGC_levels_ptr;
 
 #define CODEC_PLL_44K
 
@@ -277,17 +278,14 @@ void swap_endian(int16_t *src, int16_t *dest, int n)
 static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, int8_t AGC_max_gain, int8_t AGC_target_level, int8_t mic_bias)
 {
 	i2c_num = set_i2c_num;
-	//i2c_master_init();
 
-    //LED_BLUE_ON;
     vTaskDelay(10 / portTICK_RATE_MS);
-    //LED_BLUE_OFF;
 	printf("i2c_codec_ctrl_init(): Configuring...\n");
     gpio_set_level(CODEC_RST_PIN, 1);  //release the codec reset
     vTaskDelay(2 / portTICK_RATE_MS);
 
 	int ret;
-	uint8_t reg_status;
+	//uint8_t reg_status;
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
@@ -301,8 +299,6 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
     if (ret != ESP_OK) {
         return ret;
     }
-
-    //vTaskDelay(30 / portTICK_RATE_MS);
 
     //------------------- PLL CONFIG ---------------------------------------
 
@@ -570,8 +566,8 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
     //Page 0/Register 17: MIC2L/R to Left-ADC Control Register
 	//MIC2L Input Level Control for Left-ADC PGA Mix
     //Setting the input level control to one of the following gains automatically connects MIC2L to the left-ADC PGA mix.
-	//D7-D4: 0100: Input level control gain = –6 dB
-	//D7-D4: 1000: Input level control gain = –12 dB
+	//D7-D4: 0100: Input level control gain = -6 dB
+	//D7-D4: 1000: Input level control gain = -12 dB
 	//MIC2R/LINE2R Input Level Control for Left-ADC PGA Mix
     //Setting the input level control to one of the following gains automatically connects MIC2R to the left-ADC PGA mix.
 	//D3-D0: 1111: MIC2R/LINE2R is not connected to the left-ADC PGA.
@@ -585,7 +581,7 @@ static esp_err_t i2c_codec_ctrl_init(i2c_port_t set_i2c_num, int8_t enable_AGC, 
     //D7-D4: 1111: MIC2L/LINE2L is not connected to the right-ADC PGA.
     //MIC2R/LINE2R Input Level Control for Right-ADC PGA Mix
     //Setting the input level control to one of the following gains automatically connects MIC2R to the right-ADC PGA mix.
-    //D3-D0: 0100: Input level control gain = –6 dB
+    //D3-D0: 0100: Input level control gain = -6 dB
     //ret = i2c_codec_two_byte_command(0x12, 0xf4); //11110100 -> -6dB
     ret = i2c_codec_two_byte_command(0x12, 0xf8); //11111000 -> -12dB
     if (ret != ESP_OK) { return ret; }
@@ -797,7 +793,8 @@ void codec_silence(uint32_t length)
 
 	for(uint32_t i=0;i<SAMPLE_RATE_DEFAULT*length/1000;i++)
 	{
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
+		i2s_read(I2S_NUM, (void*)&ADC_sample0, 4, &i2s_bytes_rw, 1);
 	}
 }
 
@@ -834,7 +831,7 @@ int codec_adjust_ADC_gain(int direction)
 	{
 		printf("codec_adjust_ADC_gain(direction=%d) using PGA\n",direction);
 
-		int input = ADC_input_select;
+		//int input = ADC_input_select;
 
 		int new_volume = codec_ADC_volumes[codec_ADC_volume_CURRENT_ACTIVE_L];
 		printf("codec_adjust_ADC_gain(): input = %d, L0 = %u",codec_ADC_volume_CURRENT_ACTIVE_L,new_volume);
@@ -1224,8 +1221,8 @@ void codec_set_mute(int status)
 {
 	if(status) //mute
 	{
-		//only if volume_ramp not in process
-		if(!volume_ramp)
+		//only if volume_ramp not in process and the volume is not set to 0x80 errorneously
+		if(!volume_ramp && codec_digital_volume!=CODEC_DIGITAL_VOLUME_MUTE)
 		{
 			codec_volume_user = codec_digital_volume; //store the user-set level
 			printf("codec_set_mute(%d): storing user-set level = %d\n",status,codec_volume_user);
@@ -1342,21 +1339,21 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 	//D7: R/W 0 Left-AGC Enable
 	//0: Left AGC is disabled.
 	//1: Left AGC is enabled.
-	//D6–D4: R/W 000 Left-AGC Target Level
-	//000: Left-AGC target level = –5.5 dB
-	//001: Left-AGC target level = –8 dB
-	//010: Left-AGC target level = –10 dB
-	//011: Left-AGC target level = –12 dB
-	//100: Left-AGC target level = –14 dB
-	//101: Left-AGC target level = –17 dB
-	//110: Left-AGC target level = –20 dB
-	//111: Left-AGC target level = –24 dB
-	//D3–D2 R/W 00 Left-AGC Attack Time
+	//D6-D4: R/W 000 Left-AGC Target Level
+	//000: Left-AGC target level = -5.5 dB
+	//001: Left-AGC target level = -8 dB
+	//010: Left-AGC target level = -10 dB
+	//011: Left-AGC target level = -12 dB
+	//100: Left-AGC target level = -14 dB
+	//101: Left-AGC target level = -17 dB
+	//110: Left-AGC target level = -20 dB
+	//111: Left-AGC target level = -24 dB
+	//D3-D2 R/W 00 Left-AGC Attack Time
 	//00: Left-AGC attack time = 8 ms
 	//01: Left-AGC attack time = 11 ms
 	//10: Left-AGC attack time = 16 ms
 	//11: Left-AGC attack time = 20 ms
-	//D1–D0 R/W 00 Left-AGC Decay Time
+	//D1-D0 R/W 00 Left-AGC Decay Time
 	//00: Left-AGC decay time = 100 ms
 	//01: Left-AGC decay time = 200 ms
 	//10: Left-AGC decay time = 400 ms
@@ -1411,9 +1408,9 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 	//0000 000: Maximum gain = 0 dB
 	//0000 001: Maximum gain = 0.5 dB
 	//0000 010: Maximum gain = 1 dB
-	//…
+	//...
 	//1110 110: Maximum gain = 59 dB
-	//1110 111–111 111: Maximum gain = 59.5 dB
+	//1110 111-111 111: Maximum gain = 59.5 dB
 	//D0 R/W: 0 Reserved. Write only zero to this bit.
 	//ret = i2c_two_byte_command(0x1b, 0x00); //00000000 - max.gain 0dB
 
@@ -1446,15 +1443,15 @@ int codec_configure_AGC(int8_t enabled, int8_t max_gain, int8_t target_level)
 	//01: Hysteresis = 2 dB
 	//10: Hysteresis = 3 dB
 	//11: Hysteresis is disabled.
-	//D5–D1: R/W 00 000 Left-AGC Noise Threshold Control
+	//D5-D1: R/W 00 000 Left-AGC Noise Threshold Control
 	//00000: Left-AGC noise/silence detection disabled
-	//00001: Left-AGC noise threshold = –30 dB
-	//00010: Left-AGC noise threshold = –32 dB
-	//00011: Left-AGC noise threshold = –34 dB
-	//…
-	//11101: Left-AGC noise threshold = –86 dB
-	//11110: Left-AGC noise threshold = –88 dB
-	//11111: Left-AGC noise threshold = –90 dB
+	//00001: Left-AGC noise threshold = -30 dB
+	//00010: Left-AGC noise threshold = -32 dB
+	//00011: Left-AGC noise threshold = -34 dB
+	//...
+	//11101: Left-AGC noise threshold = -86 dB
+	//11110: Left-AGC noise threshold = -88 dB
+	//11111: Left-AGC noise threshold = -90 dB
 	//D0: R/W 0 Left-AGC Clip Stepping Control
 	//0: Left-AGC clip stepping disabled
 	//1: Left-AGC clip stepping enabled

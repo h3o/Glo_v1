@@ -1,16 +1,17 @@
 /*
  * glo_config.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jan 31, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -33,10 +34,11 @@
 
 #define CONFIG_LINE_MAX_LENGTH 500
 
-//settings
+//config.txt settings structure
 
 typedef struct
 {
+	int16_t CONFIG_FW_VERSION;
 	float TUNING_DEFAULT;
 	float TUNING_MIN;
 	float TUNING_MAX;
@@ -71,11 +73,17 @@ typedef struct
 	int DRUM_LENGTH2;
 	int DRUM_LENGTH3;
 	int DRUM_LENGTH4;
+
+	float DCO_ADC_SAMPLE_GAIN;
+	float KS_FREQ_CORRECTION;
+
 	uint64_t IDLE_SET_RST_SHORTCUT;
 	uint64_t IDLE_RST_SET_SHORTCUT;
 	uint64_t IDLE_LONG_SET_SHORTCUT;
 
 } settings_t;
+
+//persistent settings structure
 
 typedef struct
 {
@@ -84,6 +92,9 @@ typedef struct
 
 	int DIGITAL_VOLUME;
 	int8_t DIGITAL_VOLUME_updated;
+
+	uint8_t ADC_INPUT_SELECT;
+	int8_t ADC_INPUT_SELECT_updated;
 
 	int8_t EQ_BASS;
 	int8_t EQ_BASS_updated;
@@ -164,7 +175,6 @@ typedef struct
 
 } channels_map_t;
 
-//extern spi_flash_mmap_handle_t mmap_handle_config;
 extern int remapped_channels[], remapped_channels_found;
 
 typedef struct
@@ -177,18 +187,6 @@ typedef struct
 	int 	total_length;
 
 } binaural_profile_t;
-
-typedef struct
-{
-	char		*name;
-	float		position_f;
-	uint32_t	position_s;
-	uint32_t 	length_s;
-
-} voice_menu_t;
-
-#define VOICE_MENU_ITEMS_MAX 	100
-#define VOICE_MENU_ITEM_LENGTH	30
 
 #define BINAURAL_BEATS_AVAILABLE 4 //how many waves are available for cycling through
 extern const char *binaural_beats_looping[BINAURAL_BEATS_AVAILABLE];
@@ -212,7 +210,7 @@ int load_dekrispator_sequence(int id, uint8_t *notes, int *tempo);
 void store_dekrispator_patch_nvs(dekrispator_patch_t *patch);
 void load_dekrispator_patch_nvs(dekrispator_patch_t *patch);
 
-int load_clouds_patch(int patch, float *params, int expected_params);
+int load_clouds_patch(int patch, float *params, int expected_params, const char *block_name);
 
 int load_song_or_melody(int id, const char *what, char *buffer);
 
@@ -223,8 +221,6 @@ void load_binaural_profile(binaural_profile_t *profile, int binaural_id);
 void reload_binaural_profile(binaural_profile_t *profile);
 
 void load_isochronic_def(isochronic_def *def, char *block_name);
-
-int get_voice_menu_items(voice_menu_t *items);
 
 int load_settings(settings_t *settings, const char* block_name);
 void load_persistent_settings(persistent_settings_t *settings);

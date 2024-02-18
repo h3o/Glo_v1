@@ -1,28 +1,30 @@
 /*
  * fw_update.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 27, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <fw_update.h>
-#include <hw/sdcard.h>
-#include <hw/init.h>
-#include <hw/ui.h>
-#include <hw/leds.h>
+#include <string.h>
+
+#include "fw_update.h"
+#include "hw/sdcard.h"
+#include "hw/init.h"
+#include "hw/ui.h"
+#include "hw/leds.h"
 //#include "esp_image_format.h"
 #include "esp_ota_ops.h"
 #include "sha1.h"
-#include <string.h>
 
 #ifdef BOARD_GECHO
 
@@ -371,10 +373,10 @@ void factory_data_load_SD()
 	const esp_partition_t *samples_part = esp_partition_find_first(FW_DATA_PART_TYPE, FW_DATA_PART_SUBTYPE_SAMPLES, NULL);
 	printf("factory_data_load_SD(): esp_partition_find_first returned partition %s of size %x at %x\n", samples_part->label,samples_part->size,samples_part->address);
 
-    char filepath[80], file[60], hash[40];
+    char filepath[80], file[60], hash[42];
     FILE *f;
     long int filesize;
-    char file_hash[40];
+    char file_hash[42];
     int success;
 
     //---------------------------------------------------------------------------------------------------------
@@ -531,17 +533,18 @@ void factory_reset_firmware()
     esp_restart();
 }
 
-void reload_config()
+int reload_config() //returns 1 on success, 0 on error
 {
-    if(!sd_card_ready)
+    int success = 1;
+	if(!sd_card_ready)
     {
-    	printf("sd_card_info(): SD Card init... ");
+    	printf("reload_config(): SD Card init... ");
     	int result = sd_card_init(1, persistent_settings.SD_CARD_SPEED);
     	if(result!=ESP_OK)
     	{
-    		printf("sd_card_info(): problem with SD Card Init, code=%d\n", result);
+    		printf("reload_config(): problem with SD Card Init, code=%d\n", result);
 	    	indicate_error(0x55aa, 8, 80);
-    		return;
+    		return 0;
     	}
     	printf("done!\n");
     }
@@ -551,7 +554,7 @@ void reload_config()
     {
     	printf("reload_config(): Failed to open config.txt file\n");
     	indicate_error(0x0001, 10, 100);
-        return;
+        return 0;
 	}
 
     fseek(f,0,SEEK_END);
@@ -561,7 +564,7 @@ void reload_config()
     {
     	printf("reload_config(): the config.txt file does not fit partition\n");
     	indicate_error(0x0003, 10, 100);
-        return;
+        return 0;
     }
 
     char *config_buffer = malloc(CONFIG_SIZE+2);
@@ -574,7 +577,7 @@ void reload_config()
 	{
 		printf("reload_config(): end mark not found, possibly corrupt\n");
     	indicate_error(0x0007, 10, 100);
-		return;
+		return 0;
 	}
 	printf("reload_config(): config end mark found at %d\n",(int)config_ends - (int)config_buffer);
 
@@ -586,7 +589,9 @@ void reload_config()
 	}
 	else
 	{
+	    printf("reload_config(): copy_from_SD_to_Flash() copied 0 bytes!\n");
 		indicate_error(0x000f, 10, 100);
+		success = 0;
 	}
 
     fclose(f);
@@ -594,6 +599,8 @@ void reload_config()
     esp_vfs_fat_sdmmc_unmount();
 	//ESP_LOGI(TAG, "Card unmounted\n");
 	sd_card_ready = 0;
+
+	return success;
 }
 
 #endif /* BOARD_GECHO */

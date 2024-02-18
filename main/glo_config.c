@@ -1,16 +1,17 @@
 /*
  * glo_config.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jan 31, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -91,7 +92,6 @@ int read_line(char **line_ptr, char *line_buffer) {
 	}
 
 	//printf("read_line() line_end=%p\n", line_end);
-
 	//printf("line %d: nearest cr = %p, lf = %p, comment = %p, line end at = %p\n", lines_parsed, cr, lf, comment, line_end);
 
 	if (line_end == NULL) {
@@ -842,7 +842,7 @@ void load_dekrispator_patch_nvs(dekrispator_patch_t *patch)
 	printf("\n");
 }
 
-int load_clouds_patch(int patch, float *params, int expected_params)
+int load_clouds_patch(int patch, float *params, int expected_params, const char *block_name)
 {
 	char *config_buffer;
 	map_config_file(&config_buffer);
@@ -891,7 +891,7 @@ int load_clouds_patch(int patch, float *params, int expected_params)
 
 			//if(!line_done && !done)
 			//{
-			if (0 == strcmp(line_buffer, "[clouds_patches]")) {
+			if (0 == strcmp(line_buffer, block_name)) {
 				patches_map_found = 1;
 				//printf("[clouds_patches] found\n");
 			} else if (patches_map_found && line_buffer[0] == '[') {
@@ -900,7 +900,7 @@ int load_clouds_patch(int patch, float *params, int expected_params)
 				break;
 			} else if (0 == strcmp(line_buffer, "[end]")) {
 				printf(
-						"[clouds_patches] block not found in config file!\n");
+						"%s block not found in config file!\n", block_name);
 				while (1) {
 					error_blink(15, 60, 5, 30, 5, 30); /*RGB:count,delay*/
 				}; //halt
@@ -1397,7 +1397,7 @@ void load_isochronic_def(isochronic_def *def, char *block_name)
 
 	int done = 0;
 	int block_found = 0;
-	float total_length = 0, correction = 0;
+	//float total_length = 0, correction = 0;
 
 	while (!done) {
 		//printf("load_isochronic_def(): reading line %d\n", lines_parsed);
@@ -1455,109 +1455,11 @@ void load_isochronic_def(isochronic_def *def, char *block_name)
 	unmap_config_file();
 }
 
-int get_voice_menu_items(voice_menu_t *items)
-{
-	char *config_buffer;
-	map_config_file(&config_buffer);
-	//printf("get_voice_menu_items(): map_config_file returned config_buffer=%p\n", config_buffer);
-
-	char *line_ptr = config_buffer;
-	int line_length, lines_parsed = 0;
-	char *line_buffer = (char*) malloc(CONFIG_LINE_MAX_LENGTH + 2);
-
-	//parse data for voice menu items table
-	int done = 0;
-	int voice_menu_found = 0;
-	int items_found = 0;
-	float total_length = 0, correction = 0;
-
-	while (!done) {
-		//printf("get_voice_menu_items(): reading line %d\n", lines_parsed);
-		line_length = read_line(&line_ptr, line_buffer);
-		//printf("get_voice_menu_items(): line %d read, length = %d, line = \"%s\"\n", lines_parsed, line_length, line_buffer);
-
-		if (line_length) {
-			if (voice_menu_found && line_length > 2 && line_buffer[0] != '[') {
-
-				int item_name_length = 0;
-				while(line_buffer[item_name_length]!=' ' && line_buffer[item_name_length]!='\t') item_name_length++;
-
-				if(line_buffer[0]=='(')
-				{
-					if(!strncmp(line_buffer,"(total_length)",14))
-					{
-						total_length = atof(line_buffer+item_name_length);
-						printf("get_voice_menu_items(): total_length = %f\n", total_length);
-					}
-					else if(!strncmp(line_buffer,"(correction)",12))
-					{
-						correction = atof(line_buffer+item_name_length);
-						printf("get_voice_menu_items(): correction = %f\n", correction);
-					}
-				}
-				else
-				{
-					items[items_found].name = (char*)malloc(VOICE_MENU_ITEM_LENGTH);
-					strncpy(items[items_found].name, line_buffer, item_name_length);
-					items[items_found].name[item_name_length] = 0;
-					items[items_found].position_f = atof(line_buffer+item_name_length);
-					items_found++;
-				}
-			}
-
-			if (0 == strcmp(line_buffer, "[voice_menu]")) {
-				voice_menu_found = 1;
-				//printf("[voice_menu] found\n");
-			} else if (voice_menu_found && line_buffer[0] == '[') {
-				done = 1;
-				//printf("[voice_menu] block end\n");
-			} else if (0 == strcmp(line_buffer, "[end]")) {
-				printf("[voice_menu] block not found in config file!\n");
-				while (1) {
-					error_blink(15, 60, 5, 30, 5, 30); /*RGB:count,delay*/
-				}; //halt
-			}
-		}
-
-		lines_parsed++;
-	}
-
-	//parse done, release the buffer and mapped memory
-	free(line_buffer);
-	unmap_config_file();
-
-	//calculate sample positions and lengths
-	items[0].position_s = 0;
-	for(int i=1;i<items_found;i++)
-	{
-		items[i].position_f += correction;
-		items[i].position_s = (int)(items[i].position_f * (float)SAMPLE_RATE_VOICE_MENU * 2.0f);
-		items[i].position_s &= 0xfffffffe; //clear the LSB to align position to 2 bytes
-		items[i-1].length_s = items[i].position_s - items[i-1].position_s;
-	}
-	items[items_found-1].length_s = (int)((total_length+correction) * (float)SAMPLE_RATE_VOICE_MENU * 2.0f) - items[items_found-1].position_s;
-	items[items_found-1].length_s &= 0xfffffffe; //clear the LSB to align length to 2 bytes
-
-	return items_found;
-}
-
 int load_settings(settings_t *settings, const char* block_name)
 {
 	char *config_buffer;
 	map_config_file(&config_buffer);
 	//printf("load_settings(): map_config_file returned config_buffer=%p\n", config_buffer);
-
-	/*
-	printf("load_settings(): config buffer first bytes = %02x %02x %02x %02x %02x %02x %02x %02x\n",
-			config_buffer[0],
-			config_buffer[1],
-			config_buffer[2],
-			config_buffer[3],
-			config_buffer[4],
-			config_buffer[5],
-			config_buffer[6],
-			config_buffer[7]);
-	*/
 
 	if(config_buffer[0]==0xff && config_buffer[1]==0xff && config_buffer[2]==0xff && config_buffer[3]==0xff &&
 	   config_buffer[4]==0xff && config_buffer[5]==0xff && config_buffer[6]==0xff && config_buffer[7]==0xff)
@@ -1571,7 +1473,6 @@ int load_settings(settings_t *settings, const char* block_name)
 
 	int done = 0;
 	int block_found = 0;
-	float total_length = 0, correction = 0;
 
 	while (!done) {
 		//printf("load_settings(): reading line %d\n", lines_parsed);
@@ -1618,9 +1519,13 @@ int load_settings(settings_t *settings, const char* block_name)
 				if(!strncmp(line_buffer,"DRUM_LENGTH2",12)) { settings->DRUM_LENGTH2 = atoi(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"DRUM_LENGTH3",12)) { settings->DRUM_LENGTH3 = atoi(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"DRUM_LENGTH4",12)) { settings->DRUM_LENGTH4 = atoi(line_buffer+item_name_length); }
+				if(!strncmp(line_buffer,"DCO_ADC_SAMPLE_GAIN",19)) { settings->DCO_ADC_SAMPLE_GAIN = atof(line_buffer+item_name_length); }
+				if(!strncmp(line_buffer,"KS_FREQ_CORRECTION",18)) { settings->KS_FREQ_CORRECTION = atof(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"IDLE_SET_RST_SHORTCUT",21)) { settings->IDLE_SET_RST_SHORTCUT = atol(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"IDLE_RST_SET_SHORTCUT",21)) { settings->IDLE_RST_SET_SHORTCUT = atol(line_buffer+item_name_length); }
 				if(!strncmp(line_buffer,"IDLE_LONG_SET_SHORTCUT",22)) { settings->IDLE_LONG_SET_SHORTCUT = atol(line_buffer+item_name_length); }
+
+				if(!strncmp(line_buffer,"CONFIG_FW_VERSION",17)) { settings->CONFIG_FW_VERSION = fw_version_to_uint16(line_buffer+item_name_length); }
 			}
 
 			if (0 == strcmp(line_buffer, block_name)) {
@@ -1668,7 +1573,9 @@ void load_persistent_settings(persistent_settings_t *settings)
 	}
 
 	int8_t val_i8;
+	uint8_t val_u8;
 	int16_t val_i16;
+	//uint16_t val_u16;
 	uint64_t val_u64;
 
 	res = nvs_get_i16(handle, "AV", &val_i16);
@@ -1678,6 +1585,10 @@ void load_persistent_settings(persistent_settings_t *settings)
 	res = nvs_get_i16(handle, "DV", &val_i16);
 	if(res!=ESP_OK) { val_i16 = global_settings.CODEC_DIGITAL_VOLUME_DEFAULT; } //if the key does not exist, load default value
 	settings->DIGITAL_VOLUME = val_i16;
+
+	res = nvs_get_u8(handle, "ADC", &val_u8);
+	if(res!=ESP_OK) { val_u8 = ADC_INPUT_DEFAULT; } //if the key does not exist, load default value
+	settings->ADC_INPUT_SELECT = val_u8;
 
 	res = nvs_get_i8(handle, "EQ_BASS", &val_i8);
 	if(res!=ESP_OK) { val_i8 = EQ_BASS_DEFAULT; }
@@ -1770,6 +1681,12 @@ void load_persistent_settings(persistent_settings_t *settings)
 	if(res!=ESP_OK) { val_i8 = ACC_INVERT_DEFAULT; }
 	settings->ACC_INVERT = val_i8;
 
+	/*
+	res = nvs_get_u16(handle, "FW_VER", &val_u16);
+	if(res!=ESP_OK) { val_u16 = 0; }
+	settings->CONFIG_FW_VERSION = val_u16;
+	*/
+
 	nvs_close(handle);
 }
 
@@ -1803,6 +1720,16 @@ void store_persistent_settings(persistent_settings_t *settings)
 		if(res!=ESP_OK)
 		{
 			printf("store_persistent_settings(): problem with nvs_set_i16(), error = %d\n", res);
+		}
+	}
+	if(settings->ADC_INPUT_SELECT_updated)
+	{
+		printf("store_persistent_settings(): ADC_INPUT_SELECT(ADC) updated to %d\n", settings->ADC_INPUT_SELECT);
+		settings->ADC_INPUT_SELECT_updated = 0;
+		res = nvs_set_u8(handle, "ADC", settings->ADC_INPUT_SELECT);
+		if(res!=ESP_OK)
+		{
+			printf("store_persistent_settings(): problem with nvs_set_u8(), error = %d\n", res);
 		}
 	}
 	if(settings->EQ_BASS_updated)
@@ -2017,15 +1944,17 @@ void store_persistent_settings(persistent_settings_t *settings)
 int load_all_settings()
 {
     int settings_block_found = load_settings(&global_settings, "[global_settings]");
-    printf("Global settings loaded: AUTO_POWER_OFF_TIMEOUT=%d, AUTO_POWER_OFF_ONLY_IF_NO_MOTION=%d, DEFAULT_ACCESSIBLE_CHANNELS=%d, "
+    printf("Global settings loaded: CONFIG_FW_VERSION=%d, AUTO_POWER_OFF_TIMEOUT=%d, AUTO_POWER_OFF_ONLY_IF_NO_MOTION=%d, DEFAULT_ACCESSIBLE_CHANNELS=%d, "
     		"TUNING_DEFAULT=%f, TUNING_MAX=%f, TUNING_MIN=%f, TUNING_INCREASE_COEFF=%f, "
     		"GRANULAR_DETUNE_COEFF_SET=%f, GRANULAR_DETUNE_COEFF_MUL=%f, GRANULAR_DETUNE_COEFF_MAX=%f, "
     		"TEMPO_BPM_DEFAULT=%d, TEMPO_BPM_MIN=%d, TEMPO_BPM_MAX=%d, TEMPO_BPM_STEP=%d, "
     		"AGC_ENABLED=%d, AGC_MAX_GAIN=%d, AGC_TARGET_LEVEL=%d, MIC_BIAS=%d, CODEC_ANALOG_VOLUME_DEFAULT=%d, CODEC_DIGITAL_VOLUME_DEFAULT=%d, "
     		"CLOUDS_HARD_LIMITER_POSITIVE=%d, CLOUDS_HARD_LIMITER_NEGATIVE=%d, CLOUDS_HARD_LIMITER_MAX=%d, CLOUDS_HARD_LIMITER_STEP=%d, "
     		"DRUM_THRESHOLD_ON=%f, DRUM_THRESHOLD_OFF=%f, DRUM_LENGTH1=%d, DRUM_LENGTH2=%d, DRUM_LENGTH3=%d, DRUM_LENGTH4=%d, "
+    		"DCO_ADC_SAMPLE_GAIN=%f, KS_FREQ_CORRECTION=%f, "
     		"IDLE_SET_RST_SHORTCUT=%llu, IDLE_RST_SET_SHORTCUT=%llu, IDLE_LONG_SET_SHORTCUT=%llu\n",
-    		global_settings.AUTO_POWER_OFF_TIMEOUT,
+			global_settings.CONFIG_FW_VERSION,
+			global_settings.AUTO_POWER_OFF_TIMEOUT,
 			global_settings.AUTO_POWER_OFF_ONLY_IF_NO_MOTION,
 			global_settings.DEFAULT_ACCESSIBLE_CHANNELS,
 			global_settings.TUNING_DEFAULT,
@@ -2055,6 +1984,8 @@ int load_all_settings()
 			global_settings.DRUM_LENGTH2,
 			global_settings.DRUM_LENGTH3,
 			global_settings.DRUM_LENGTH4,
+			global_settings.DCO_ADC_SAMPLE_GAIN,
+			global_settings.KS_FREQ_CORRECTION,
 			global_settings.IDLE_SET_RST_SHORTCUT,
 			global_settings.IDLE_RST_SET_SHORTCUT,
 			global_settings.IDLE_LONG_SET_SHORTCUT
@@ -2068,11 +1999,12 @@ int load_all_settings()
     //codec_volume_user = global_settings.CODEC_DIGITAL_VOLUME_DEFAULT;
 
     load_persistent_settings(&persistent_settings);
-    printf("Persistent settings loaded: ANALOG_VOLUME=%d, DIGITAL_VOLUME=%d, EQ_BASS=%d, EQ_TREBLE=%d, TEMPO=%d, TRANSPOSE=%d, FINE_TUNING=%f, BEEPS=%d, "
+    printf("Persistent settings loaded: ANALOG_VOLUME=%d, DIGITAL_VOLUME=%d, ADC_INPUT_SELECT=%d, EQ_BASS=%d, EQ_TREBLE=%d, TEMPO=%d, TRANSPOSE=%d, FINE_TUNING=%f, BEEPS=%d, "
     		"ALL_CHANNELS_UNLOCKED=%d, MIDI_SYNC_MODE=%d, MIDI_POLYPHONY_MODE=%d, PARAMS_SENSORS=%d, AGC_ENABLED_OR_PGA=%d, AGC_MAX_GAIN=%d, "
     		"ALL_LEDS_OFF=%d, AUTO_POWER_OFF=%d, SAMPLING_RATE=%u, SD_CARD_SPEED=%d, ACC_ORIENTATION=%d, ACC_INVERT=%d\n",
     		persistent_settings.ANALOG_VOLUME,
     		persistent_settings.DIGITAL_VOLUME,
+			persistent_settings.ADC_INPUT_SELECT,
 			persistent_settings.EQ_BASS,
 			persistent_settings.EQ_TREBLE,
 			persistent_settings.TEMPO,
@@ -2100,7 +2032,7 @@ int load_all_settings()
     global_tuning = persistent_settings.FINE_TUNING;
     beeps_enabled = persistent_settings.BEEPS;
 
-    //hide extra channels unless unlocked
+    //hide extra channels unless unlocked (only used in whale)
     if(!persistent_settings.ALL_CHANNELS_UNLOCKED)
     {
     	channels_found = global_settings.DEFAULT_ACCESSIBLE_CHANNELS;
@@ -2109,6 +2041,7 @@ int load_all_settings()
     midi_sync_mode = persistent_settings.MIDI_SYNC_MODE;
     midi_polyphony = persistent_settings.MIDI_POLYPHONY;
     use_acc_or_ir_sensors = persistent_settings.PARAMS_SENSORS;
+    ADC_input_select = persistent_settings.ADC_INPUT_SELECT;
 
     return settings_block_found;
 }

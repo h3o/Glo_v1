@@ -436,7 +436,7 @@ void sequencer_process(void) // To be called at each sample treatment
 	{
 		if(MIDI_notes_updated)
 		{
-			printf("MIDI_notes_updated\n");
+			//printf("MIDI_notes_updated\n");
 			MIDI_notes_updated = 0;
 
 			LED_W8_all_OFF();
@@ -444,18 +444,18 @@ void sequencer_process(void) // To be called at each sample treatment
 
 			if(MIDI_keys_pressed)
 			{
-				printf("MIDI keys pressed, ADSR key On;\n");
+				//printf("MIDI keys pressed, ADSR key On;\n");
 				MIDI_to_LED(MIDI_last_chord[0], 1);
 				ADSR_keyOn(&adsr);
 
-				f0 = notesFreq[MIDI_last_chord[0]];
+				f0 = notesFreq[MIDI_last_chord[0] + 2];
 				vol = frand_a_b(0.4f , .8f); // slightly random volume for each note
 
 				//if (autoFilterON) SVF_directSetFilterValue(&SVFilter, Ts * 600.f * powf(5000.f / 600.f, frand_a_b(0 , 1)));
 			}
 			else
 			{
-				printf("no MIDI keys pressed, ADSR key Off;\n");
+				//printf("no MIDI keys pressed, ADSR key Off;\n");
 				ADSR_keyOff(&adsr);
 			}
 		}

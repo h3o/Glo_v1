@@ -1,29 +1,79 @@
-//Includes
+/*
+ * legacy.h - Filters + Echo + WT + Goertzel test/demo program
+ *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
+ *  Created on: Apr 10, 2016
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
+ */
 
-#define IRAM_ATTR __attribute__((section(".iram1")))
-
+#include <esp_attr.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "v1_filters.h"
-//#include "Synth.h"
-//#include "gyro.h"
-//#include "sensors.h"
-//#include "fft.h"
-//#include "detectors.h"
-
 #include "v1_gpio.h"
-//#include "eeprom.h"
-//#include "codec.h"
 #include "v1_signals.h"
 
 #define ENABLE_ECHO
-#define ENABLE_JAMMING
+#define ENABLE_RHYTHM
 #define ENABLE_CHORD_LOOP
 #define ADD_MICROPHONE_SIGNAL
 #define ADD_PLAIN_NOISE
-#define ENABLE_LIMITER
+
+#define ENABLE_LIMITER_FLOAT
+#define ENABLE_LIMITER_INT
+
 #define USE_FAUX_22k_MODE
+#define USE_IR_SENSORS
+
+//sensor 4 - arp
+#define SENSOR_ARP_ACTIVE_1				SENSOR_THRESHOLD_WHITE_8
+#define SENSOR_ARP_ACTIVE_2				SENSOR_THRESHOLD_WHITE_7
+#define SENSOR_ARP_ACTIVE_3				SENSOR_THRESHOLD_WHITE_6
+#define SENSOR_ARP_ACTIVE_4				SENSOR_THRESHOLD_WHITE_5
+#define SENSOR_ARP_ACTIVE_5				SENSOR_THRESHOLD_WHITE_4
+#define SENSOR_ARP_ACTIVE_6				SENSOR_THRESHOLD_WHITE_3
+#define SENSOR_ARP_ACTIVE_7				SENSOR_THRESHOLD_WHITE_2
+#define SENSOR_ARP_ACTIVE_8				SENSOR_THRESHOLD_WHITE_1
+#define SENSOR_ARP_INCREASE				(ir_res[3]*0.6f)
+
+//sensor 3 - resonance
+#define SENSOR_RESO_ACTIVE_1			SENSOR_THRESHOLD_BLUE_5
+#define SENSOR_RESO_ACTIVE_2			SENSOR_THRESHOLD_BLUE_4
+#define SENSOR_RESO_ACTIVE_3			SENSOR_THRESHOLD_BLUE_3
+#define SENSOR_RESO_ACTIVE_4			SENSOR_THRESHOLD_BLUE_2
+#define SENSOR_RESO_ACTIVE_5			SENSOR_THRESHOLD_BLUE_1
+
+//sensor 2 - noise mixing volume decrease
+#define SENSOR_NOISE_DIM_ACTIVE_1		SENSOR_THRESHOLD_ORANGE_1
+#define SENSOR_NOISE_DIM_LEVEL			(1.0f-ir_res[1])
+#define SENSOR_NOISE_DIM_LEVEL_DEFAULT	1.0f
+
+//sensor 1 - noise mixing volume increase
+#define SENSOR_NOISE_RISE_ACTIVE_1		SENSOR_THRESHOLD_RED_1
+#define SENSOR_NOISE_RISE_LEVEL			(1.0f+2*ir_res[0])
+
+/*
+//sensor 1 - echo delay length
+#define SENSOR_DELAY_9					SENSOR_THRESHOLD_RED_9
+#define SENSOR_DELAY_8					SENSOR_THRESHOLD_RED_8
+#define SENSOR_DELAY_7					SENSOR_THRESHOLD_RED_7
+#define SENSOR_DELAY_6					SENSOR_THRESHOLD_RED_6
+#define SENSOR_DELAY_5					SENSOR_THRESHOLD_RED_5
+#define SENSOR_DELAY_4					SENSOR_THRESHOLD_RED_4
+#define SENSOR_DELAY_3					SENSOR_THRESHOLD_RED_3
+#define SENSOR_DELAY_2					SENSOR_THRESHOLD_RED_2
+#define SENSOR_DELAY_ACTIVE				SENSOR_THRESHOLD_RED_1
+*/
 
 //#define LEGACY_USE_44k_RATE
 #define LEGACY_USE_48k_RATE
@@ -36,14 +86,11 @@
 //#define PREAMP_BOOST 12.0f //stm32f4-disc1
 //#define PREAMP_BOOST 8 //gecho v1 board
 
+#define ARP_VOLUME_MULTIPLIER_DEFAULT	3.333f
+
 //#define DEBUG_SIGNAL_LEVELS
 
-//-----------------------------------------------------------------------------------
-
-//bool sample_processed = false;
-extern int sample_counter;// = 0;
-//uint32_t sampleCounter = 0;
-//volatile int16_t sample_i16 = 0, sample_i16_left = 0;
+extern int sample_counter;
 
 void LED_indicators();
 
@@ -51,60 +98,27 @@ void LED_indicators();
 	extern v1_filters *v1_fil;
 #endif
 
-//uint32_t random_value;
-//int random_direction = 0;
-
-//char print_buf[100];
 extern float sample_f[2],sample_synth[2],sample_mix;
 extern unsigned long seconds;
 
 #define SAMPLE_VOLUME_BOOST_MAX 5.0f
-extern float SAMPLE_VOLUME_BOOST;// = 1.0f;
+extern float SAMPLE_VOLUME_BOOST;
 
-//float volume2 = 6000.0f;
-//float volume2 = 3200.0f;
-//float volume2 = 1600.0f;
-extern float volume2;// = 800.0f;
-//float volume2 = 400.0f;
-//float volume2 = 200.0f;
+extern float volume2;
+extern float noise_volume, noise_volume_max;
 
-extern float noise_volume, noise_volume_max;// = 1.0f;
+#ifdef ENABLE_RHYTHM
+	extern int progressive_rhythm_factor;
 
-#ifdef ENABLE_JAMMING
-	extern int progressive_jamming_factor;// = 1;
-
-	#define PROGRESSIVE_JAMMING_BOOST_RATIO 2
-	#define PROGRESSIVE_JAMMING_RAMP_COEF 0.999f
+	#define PROGRESSIVE_RHYTHM_BOOST_RATIO 2
+	#define PROGRESSIVE_RHYTHM_RAMP_COEF 0.999f
 #endif
-
-/*
-uint16_t mic_sample;
-uint16_t mic_sample_raw=0;
-uint32_t mic_sample_sum=0;
-uint16_t mic_sample_count=0;
-float mic_sample_avg;
-uint16_t mic_sample_raw_buf[MIC_OUT_BUF_SIZE];
-int mic_sample_raw_buf_ptr=0;
-int new_mic_sample_buf_available_cnt=0;
-int new_mic_sample_buf_available=0;
-*/
-//int16_t v1=0,v2=0,v1a,v1b,v2a,v2b;
-//int PlaybackPosition=0;
 
 #define AUDIOFREQ_DIV_CORRECTION 4
 
-#define ECHO_BUFFER_LENGTH v1_I2S_AUDIOFREQ
-//#define ECHO_BUFFER_LENGTH I2S_AUDIOFREQ /4
-
-#ifdef ENABLE_ECHO
-	//uint16_t echo_buffer[ECHO_BUFFER_LENGTH];
-	extern int echo_buffer_ptr0, echo_buffer_ptr;
-#endif
-
 void legacy_main();
+int16_t add_echo_legacy(int16_t sample);
 
-// --------------------------------------------------------------
 extern uint32_t ADC_sample, ADC_sample0;
-extern int16_t echo_buffer[];
 extern uint32_t random_value;
 extern volatile int16_t sample_i16;

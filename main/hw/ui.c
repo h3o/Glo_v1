@@ -1,16 +1,17 @@
 /*
  * ui.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Nov 5, 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -23,6 +24,7 @@
 #include <hw/leds.h>
 #include <hw/sdcard.h>
 #include <hw/midi.h>
+#include <hw/sync.h>
 #include <string.h>
 
 #include <Interface.h>
@@ -32,6 +34,7 @@ int event_next_channel = 0;
 int event_channel_options = 0;
 int settings_menu_active = 0;
 //int menu_indicator_active = 0;
+int context_menu_enabled = 1;
 int context_menu_active = 0;
 int main_menu_active = 0;
 int main_menu_restart_on_close = 0;
@@ -115,11 +118,13 @@ void process_buttons_controls_gecho(void *pvParameters)
 	printf("process_buttons_controls_gecho(): started on core ID=%d\n", xPortGetCoreID());
 
 	int auto_shutdown_timeout_counter = 0;
-	int seconds_lapsed = 0;
+	//int seconds_lapsed = 0;
 
 	while(1)
 	{
 		Delay(BUTTONS_CNT_DELAY);
+
+		//printf("ms10_counter=%d,main_menu_active=%d,context_menu_active=%d\n",ms10_counter,main_menu_active,context_menu_active);
 
 		#ifdef BOARD_GECHO
 		auto_shutdown_timeout_counter++;
@@ -135,7 +140,10 @@ void process_buttons_controls_gecho(void *pvParameters)
 
 				if (auto_power_off < AUTO_POWER_OFF_VOLUME_RAMP)
 				{
-					codec_digital_volume = codec_volume_user + (int)((1.0f - (float)(auto_power_off) / (float)AUTO_POWER_OFF_VOLUME_RAMP) * ((float)(CODEC_DIGITAL_VOLUME_MIN) / 1.5f - (float)(codec_volume_user)));
+					//codec_digital_volume = codec_volume_user + (int)((1.0f - (float)(auto_power_off) / (float)AUTO_POWER_OFF_VOLUME_RAMP) * ((float)(CODEC_DIGITAL_VOLUME_MIN) / 1.5f - (float)(codec_volume_user)));
+					codec_digital_volume = codec_volume_user + ((CODEC_DIGITAL_VOLUME_MIN * 2 * (AUTO_POWER_OFF_VOLUME_RAMP-auto_power_off)) / 3) / AUTO_POWER_OFF_VOLUME_RAMP;
+					if(codec_digital_volume > CODEC_DIGITAL_VOLUME_MIN) codec_digital_volume = CODEC_DIGITAL_VOLUME_MIN;
+					//printf("auto_power_off=%d, codec_volume_user=%d, codec_digital_volume=%d\n", auto_power_off, codec_volume_user, codec_digital_volume);
 					codec_set_digital_volume();
 				}
 
@@ -203,11 +211,10 @@ void process_buttons_controls_gecho(void *pvParameters)
 			}
 			continue;
 		}
-
 		if (next_event_lock)
 		{
 			//wait till all buttons released
-			while(ANY_BUTTON_ON);
+			while(ANY_BUTTON_ON) { Delay(10); }
 			printf("process_buttons_controls_gecho(): next_event_lock -> all buttons released\n");
 			next_event_lock = 0;
 		}
@@ -354,9 +361,13 @@ void process_buttons_controls_gecho(void *pvParameters)
 						{
 							codec_digital_volume--; //actually means increment, as the value meaning is reversed
 							codec_set_digital_volume();
-							persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
-							persistent_settings.DIGITAL_VOLUME_updated = 1;
-							persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+							if(auto_power_off > AUTO_POWER_OFF_VOLUME_RAMP)
+							{
+								codec_volume_user = codec_digital_volume;
+								persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
+								persistent_settings.DIGITAL_VOLUME_updated = 1;
+								persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+							}
 						}
 					}
 				}
@@ -370,9 +381,13 @@ void process_buttons_controls_gecho(void *pvParameters)
 						{
 							codec_digital_volume++; //actually means decrement, as the value meaning is reversed
 							codec_set_digital_volume();
-							persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
-							persistent_settings.DIGITAL_VOLUME_updated = 1;
-							persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+							if(auto_power_off > AUTO_POWER_OFF_VOLUME_RAMP)
+							{
+								codec_volume_user = codec_digital_volume;
+								persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
+								persistent_settings.DIGITAL_VOLUME_updated = 1;
+								persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+							}
 						}
 					}
 				}
@@ -414,7 +429,18 @@ void process_buttons_controls_gecho(void *pvParameters)
 								echo_dynamic_loop_current_step = ECHO_DYNAMIC_LOOP_LENGTH_ECHO_OFF;
 							}
 							DELAY_BY_TEMPO = get_delay_by_BPM(tempo_bpm);
-							echo_dynamic_loop_length = (float)echo_dynamic_loop_steps[echo_dynamic_loop_current_step] * (float)DELAY_BY_TEMPO/(float)I2S_AUDIOFREQ;
+							//echo_dynamic_loop_length = (float)echo_dynamic_loop_steps[echo_dynamic_loop_current_step] * (float)DELAY_BY_TEMPO/(float)I2S_AUDIOFREQ;
+
+							uint32_t delay_len; //temp value so the calculation does not overflow int range
+							//DELAY_BY_TEMPO = 50780, delay_len[1] = 3867912600 delay_len[2] = 76170
+							//gets up to 3,867,912,600 max int 2,147,483,647 max uint 4,294,967,295
+
+							delay_len = echo_dynamic_loop_steps[echo_dynamic_loop_current_step] * DELAY_BY_TEMPO;
+							//printf("DELAY_BY_TEMPO = %d, delay_len[1] = %u\n", DELAY_BY_TEMPO, delay_len);
+							delay_len /= I2S_AUDIOFREQ;
+							//printf("delay_len[2] = %u\n", delay_len);
+
+							echo_dynamic_loop_length = delay_len;
 
 							while (echo_dynamic_loop_length > ECHO_BUFFER_LENGTH)
 							{
@@ -454,6 +480,10 @@ void process_buttons_controls_gecho(void *pvParameters)
 							printf("process_buttons_controls_gecho(): input_select = %d\n", ADC_input_select);
 							codec_select_input(ADC_input_select);
 
+							persistent_settings.ADC_INPUT_SELECT = ADC_input_select;
+							persistent_settings.ADC_INPUT_SELECT_updated = 1;
+							persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+
 							settings_indication_in_progress = SETTINGS_INDICATION_TIMEOUT;
 							//menu_indicator_active = 1;
 							LED_O4_set_byte(0x08);
@@ -476,6 +506,7 @@ void process_buttons_controls_gecho(void *pvParameters)
 				}
 			}
 
+			if(context_menu_enabled)
 			if (btn_event >= BUTTON_EVENT_SET_PLUS + BUTTON_1 && btn_event <= BUTTON_EVENT_SET_PLUS + BUTTON_4)
 			{
 				context_menu_active = btn_event - BUTTON_EVENT_SET_PLUS;
@@ -500,7 +531,7 @@ void process_buttons_controls_gecho(void *pvParameters)
 			btn_event = 0;
 		}
 		/*
-		//blink the oragne LED to indicate which context menu is active
+		//blink the orange LED to indicate which context menu is active
 		else if (context_menu_active)
 		{
 			LED_O4_set(context_menu_active-1, (ms10_counter/12)%2);
@@ -927,6 +958,18 @@ int main_menu_action(int level, int button)
 	printf("main_menu_action(level=%d, button=%d)\n",level,button);
 	LED_R8_all_OFF();
 
+	if(level==MAIN_MENU_MIDI_CTRL_SETUP_LEVEL && button==MAIN_MENU_MIDI_CTRL_SETUP_BTN)
+	{
+		printf("main_menu_action(): MAIN_MENU_MIDI_CTRL_SETUP\n");
+		setup_MIDI_controls();
+	}
+
+	if(level==MAIN_MENU_MIDI_CTRL_RESET_LEVEL && button==MAIN_MENU_MIDI_CTRL_RESET_BTN)
+	{
+		printf("main_menu_action(): MAIN_MENU_MIDI_CTRL_RESET\n");
+		reset_MIDI_controls();
+	}
+
 	if(level==MAIN_MENU_MIDI_SYNC_MODE_LEVEL && button==MAIN_MENU_MIDI_SYNC_MODE_BTN)
 	{
 		printf("main_menu_action(): MAIN_MENU_MIDI_SYNC_MODE\n");
@@ -1159,41 +1202,6 @@ int main_menu_action(int level, int button)
 	return 0;
 }
 
-/*
-void voice_menu_say(const char *item, voice_menu_t *items, int total_items)
-{
-	for (int i = 0; i < total_items; i++)
-	{
-		if (!strncmp(items[i].name, item, strlen(item)))
-		{
-			printf("voice_menu_say(): playing item %s (%d - %d)\n", items[i].name, items[i].position_s, items[i].length_s);
-
-			codec_set_mute(0); //unmute the codec
-
-			for (int sample_ptr = 0; sample_ptr < items[i].length_s / 2; sample_ptr++)
-			{
-				sample32 = mixed_sample_buffer[(items[i].position_s / 2) + sample_ptr] / 8;
-				sample32 <<= 16;
-				sample32 &= 0xffff0000;
-				sample32 += mixed_sample_buffer[(items[i].position_s / 2) + sample_ptr] / 8;
-
-				//swapped endians - total distortion
-				//sample32 <<= 16;
-				//sample32 &= 0x00ff0000;
-				//sample32 += mixed_sample_buffer[(items[i].position_s/2)+sample_ptr];
-				//sample32 <<= 8;
-				//((uint16_t*)(&sample32))[0] = ((uint16_t*)(&sample32))[1];
-
-				i2s_push_sample(I2S_NUM, (char *) &sample32, portMAX_DELAY);
-			}
-
-			codec_set_mute(1); //mute the codec
-			printf("voice_menu_say(): playing done\n");
-		}
-	}
-}
-*/
-
 uint8_t button_SET_state = 0;
 uint8_t button_RST_state = 0;
 uint8_t button_user_state[4] = { 0, 0, 0, 0 };
@@ -1361,6 +1369,8 @@ uint64_t select_channel()
 	int press_order[PRESS_ORDER_MAX], press_order_ptr = 0;
 	uint64_t result = 0; //2^64 = 18446744073709551616 -> max 20 digits (or 19 if can start with 4)
 
+	printf("select_channel(): tempo_detect_success  = %d, start_channel_by_sync_pulse = %d\n", tempo_detect_success, start_channel_by_sync_pulse);
+
 	button_SET_state = 0;
 
 	while(1)
@@ -1381,9 +1391,21 @@ uint64_t select_channel()
 
 		loop++;
 
+		if(press_order_ptr && tempo_detect_success && start_channel_by_sync_pulse)
+		{
+			result = get_user_buttons_sequence(&press_order_ptr, press_order);
+			printf("select_channel(): start by sync, result = %llu\n", result);
+			return result;
+		}
+
 		if ((button = scan_buttons()) > -1) //some button was just pressed
 		{
 			//printf("select_channel(): scan_buttons() returned code = %d\n", button);
+
+			if(tempo_detect_success)
+			{
+				start_channel_by_sync_pulse = 0;
+			}
 
 			if (button <= SCAN_BUTTONS_RESULT_BTN4) //user button 1-4 pressed
 			{
@@ -1395,8 +1417,6 @@ uint64_t select_channel()
 				result = get_user_buttons_sequence(&press_order_ptr, press_order);
 				if (result>0)
 				{
-					//since the channel was selected manually and not via serial command, will block serial
-					//GPIO_Deinit_USART1();
 					printf("select_channel(): result = %llu\n", result);
 					return result;
 				}
@@ -1425,8 +1445,6 @@ uint64_t select_channel()
 							|| (main_menu_active == MAIN_MENU_LEVEL_0 && button == SCAN_BUTTONS_RESULT_SET_100MS)) //RST pressed for 100ms, or SET while in level 0
 							{
 								main_menu_active = 0;
-								//LED_O4_all_OFF();
-								//LED_R8_all_OFF();
 								LEDs_all_OFF();
 								printf("select_channel(): storing persistent settings\n");
 								store_persistent_settings(&persistent_settings);
@@ -1443,16 +1461,6 @@ uint64_t select_channel()
 								LED_R8_all_OFF();
 								LED_B5_all_OFF();
 								LED_W8_all_OFF();
-								/*
-								printf("select_channel(): storing persistent settings\n");
-								store_persistent_settings(&persistent_settings);
-								printf("select_channel(): exiting sub-menu\n");
-								if(main_menu_restart_on_close)
-								{
-									printf("select_channel(): restart required after a main menu setting updated\n");
-									esp_restart();
-								}
-								*/
 							}
 							else if (button <= SCAN_BUTTONS_RESULT_BTN4) //user button 1-4 pressed
 							{
@@ -1496,20 +1504,6 @@ uint64_t select_channel()
 				result = global_settings.IDLE_LONG_SET_SHORTCUT;
 				printf("select_channel(): result = %llu\n", result);
 				return result;
-
-				/*
-				if (press_order_ptr == 0) //if no program chosen, turn off
-				{
-					return 0; //mcu_and_codec_shutdown();
-				}
-				else
-				{
-					result = get_user_buttons_sequence(&press_order_ptr, press_order);
-					//since the channel was selected manually and not via serial command, will block serial
-					//GPIO_Deinit_USART1();
-					return result * 10 + 5;//append 5 to the decimal expansion of the number
-				}
-				*/
 			}
 			/*
 			else if (button == SCAN_BUTTONS_RESULT_SET_3S) //SET pressed for 3 seconds
@@ -1527,6 +1521,11 @@ uint64_t select_channel()
 			else if (button == SCAN_BUTTONS_RESULT_RST_1S) //RST pressed for 1 second, restart
 			{
 				printf("rst_button(SCAN_BUTTONS_RESULT_RST_1S) detected, restarting\n");
+				codec_set_mute(1); //mute the codec
+				Delay(100);
+				codec_reset();
+				stop_MCLK();
+				Delay(10);
 				esp_restart();
 			}
 		}
@@ -1595,7 +1594,6 @@ uint64_t get_user_number()
 
 int get_tempo_by_BPM(int bpm)
 {
-	//int b = 2*SAMPLE_RATE_DEFAULT; //120BPM (16s / loop);
 	int b = SAMPLE_RATE_DEFAULT; //120BPM (16s / loop);
 
 	if (bpm == 120)
@@ -1603,7 +1601,6 @@ int get_tempo_by_BPM(int bpm)
 		return b;
 	}
 
-	//b = ((int)((2*(double)SAMPLE_RATE_DEFAULT*120.0f/(double)bpm)/4))*4; //must be divisible by 4 and rounded down
 	b = ((int) ((double) SAMPLE_RATE_DEFAULT * 120.0f / (double) bpm) / 4) * 4; //must be divisible by 4 and rounded down
 	return b;
 }
@@ -1847,8 +1844,7 @@ void buttons_sequence_check(int event)
 
 void process_buttons_controls_whale(void *pvParameters)
 {
-	printf("process_buttons_controls_whale(): started on core ID=%d\n",
-			xPortGetCoreID());
+	printf("process_buttons_controls_whale(): started on core ID=%d\n", xPortGetCoreID());
 
 	while (1)
 	{
@@ -1925,9 +1921,13 @@ void process_buttons_controls_whale(void *pvParameters)
 					{
 						codec_digital_volume--; //actually means increment, as the value meaning is reversed
 						codec_set_digital_volume();
-						persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
-						persistent_settings.DIGITAL_VOLUME_updated = 1;
-						persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+						if(auto_power_off > AUTO_POWER_OFF_VOLUME_RAMP)
+						{
+							codec_volume_user = codec_digital_volume;
+							persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
+							persistent_settings.DIGITAL_VOLUME_updated = 1;
+							persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+						}
 					}
 				}
 
@@ -1967,9 +1967,13 @@ void process_buttons_controls_whale(void *pvParameters)
 					{
 						codec_digital_volume++; //actually means decrement, as the value meaning is reversed
 						codec_set_digital_volume();
-						persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
-						persistent_settings.DIGITAL_VOLUME_updated = 1;
-						persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+						if(auto_power_off > AUTO_POWER_OFF_VOLUME_RAMP)
+						{
+							codec_volume_user = codec_digital_volume;
+							persistent_settings.DIGITAL_VOLUME = codec_digital_volume;
+							persistent_settings.DIGITAL_VOLUME_updated = 1;
+							persistent_settings.update = PERSISTENT_SETTINGS_UPDATE_TIMER;
+						}
 					}
 				}
 
@@ -2217,7 +2221,10 @@ void check_auto_power_off()
 
 	if (auto_power_off < AUTO_POWER_OFF_VOLUME_RAMP)
 	{
-		codec_digital_volume = codec_volume_user + (int)((1.0f - (float)(auto_power_off) / (float)AUTO_POWER_OFF_VOLUME_RAMP) * ((float)(CODEC_DIGITAL_VOLUME_MIN) / 1.5f - (float)(codec_volume_user)));
+		//codec_digital_volume = codec_volume_user + (int)((1.0f - (float)(auto_power_off) / (float)AUTO_POWER_OFF_VOLUME_RAMP) * ((float)(CODEC_DIGITAL_VOLUME_MIN) / 1.5f - (float)(codec_volume_user)));
+		codec_digital_volume = codec_volume_user + ((CODEC_DIGITAL_VOLUME_MIN * 2 * (AUTO_POWER_OFF_VOLUME_RAMP-auto_power_off)) / 3) / AUTO_POWER_OFF_VOLUME_RAMP;
+		if(codec_digital_volume > CODEC_DIGITAL_VOLUME_MIN) codec_digital_volume = CODEC_DIGITAL_VOLUME_MIN;
+		//printf("auto_power_off=%d, codec_volume_user=%d, codec_digital_volume=%d\n", auto_power_off, codec_volume_user, codec_digital_volume);
 		codec_set_digital_volume();
 	}
 

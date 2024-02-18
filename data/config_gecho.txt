@@ -1,5 +1,11 @@
 [global_settings]
 
+CONFIG_FW_VERSION			1.0.118	//the firmware version that this config is good for
+
+//if your firmware is newer than existing config flashed in the device, and there is config.txt file on SD card, it will be loaded on boot.
+//this also allows you to have the config loaded on every boot (may be useful when experimenting with the configuration), 
+//just change the version number in the config.txt to something old - for example "1.0.100"  
+
 TUNING_DEFAULT 				440.0
 
 TUNING_MIN					391.9954359818
@@ -12,7 +18,7 @@ TUNING_INCREASE_COEFF		1.0057929410678534309188527497122	//10 cents, 120th root 
 
 GRANULAR_DETUNE_COEFF_SET	0.01
 GRANULAR_DETUNE_COEFF_MUL	2
-GRANULAR_DETUNE_COEFF_MAX	50 //above this produces some nasty noises
+GRANULAR_DETUNE_COEFF_MAX	55 //above this produces some nasty noises
 
 TEMPO_BPM_DEFAULT			120
 TEMPO_BPM_MIN				10
@@ -66,18 +72,17 @@ IDLE_LONG_SET_SHORTCUT				2222
 14:bytebeat:settings=2		//bytebeat
 
 //21:
-//22:
+22:looper_shifter			//looper with octave up/down pitch shifter
 23:filter_flanger			//looper with LPF, HPF and flanger
 24:infinite_looper			//looper with warping and reversible delay
 
-
 31:granular:settings=2		//granular sampler
-32:reverb:settings=2		//decaying reverb
+32:reverb:settings=1		//decaying reverb
 33:dekrispator:settings=2	//dekrispator
-34:clouds:settings=2		//Mutable Instruments Clouds port
+34:clouds:settings=1		//Mutable Instruments Clouds port, PLAYBACK_MODE_GRANULAR
 
-41:dco:settings=2							//DCO synth from v1 model
-//42:
+41:dco_legacy:settings=2					//DCO synth from v1 model
+42:dco:settings=2							//DCO synth (new)
 43:direct_waves:0,settings=1,binaural=6		//space channel, no reverb (alternative fire element)
 44:direct_waves:1,settings=1,binaural=5		//space channel with reverb (fire element)
 
@@ -96,14 +101,14 @@ IDLE_LONG_SET_SHORTCUT				2222
 //114:program_song:settings=4		//clear custom song
 
 121:drum_kit:settings=2				//drum kit
-//122:
+122:just_water:settings=1			//just water
 123:pass_through_mics:settings=1	//field recording via mics
 124:pass_through_linein:settings=1	//recording via line-in / pickups
 
-//131:
-//132:
-//133:
-//134:
+131:karplus_strong:settings=1
+//132:supersaw:settings=1
+//133:wavetable:settings=1
+//134:vocoder:settings=1
 
 //141:
 //142:
@@ -115,8 +120,8 @@ IDLE_LONG_SET_SHORTCUT				2222
 //213:
 //214:
 
-//221:
-//222:
+221:mellotron				//play a preloaded sample per MIDI key		
+222:recorded_sample_slicer	//play back segments from most recent recorded file in a randomized chopped way
 //223:
 //224:
 
@@ -130,8 +135,16 @@ IDLE_LONG_SET_SHORTCUT				2222
 //243:
 //244:
 
-//344:all_the_sounds					//Simon Magpie's "A Song With ALL THE SOUNDS" https://www.youtube.com/watch?v=wA7-iLgjnzA
+322:reverb:settings=2		//extended decaying reverb (multiple buffers)
+
+342:clouds:settings=2		//Mutable Instruments Clouds port, PLAYBACK_MODE_STRETCH
+343:clouds:settings=3		//Mutable Instruments Clouds port, PLAYBACK_MODE_LOOPING_DELAY
+//344:clouds:settings=4		//Mutable Instruments Clouds port, PLAYBACK_MODE_SPECTRAL
+
+//411:all_the_sounds					//Simon Magpie's "A Song With ALL THE SOUNDS" https://www.youtube.com/watch?v=wA7-iLgjnzA
 //433:pass_through_mics:settings=273	//John Cage's 4'33 of ambient sound only
+
+333:sysex_sender
 
 //custom song
 1111:high_pass:999,0,2,1.0,settings=1,binaural=1			//sea 1+2 (water element)
@@ -432,6 +445,21 @@ c4e4g4 //a placeholder chord for channels that use dynamically controlled MusicB
 
 [dekrispator_patches]
 
+MagicPatch():0,0,0,0,8,0,0,0,0,0,0,0,0,44,22,80,31,18,4,12,28,64,99,65,64,64,63,62,5,64,0,27,1,37,16,87,64,0,0,1,64,
+MagicFX():64,35,0,29,115,0,103,21,0,75,
+
+MagicPatch():0,0,0,0,8,0,0,0,0,0,0,0,0,44,22,80,31,18,4,12,28,64,99,65,64,64,63,62,5,64,0,27,1,37,16,87,32,4,0,5,64,
+MagicFX():0,103,17,30,122,38,70,34,19,95,
+
+MagicPatch():0,0,0,0,8,0,0,0,0,0,0,0,0,44,22,80,31,18,4,12,28,64,99,65,64,64,63,62,5,64,0,27,1,37,16,87,32,4,0,5,64,
+MagicFX():0,110,31,35,113,38,70,34,19,95,
+
+MagicPatch():0,0,0,0,8,0,0,0,0,0,0,79,26,65,24,29,18,56,77,64,28,64,99,65,64,64,63,62,5,64,0,113,1,27,15,21,63,0,65,64,0,
+MagicFX():7,126,20,30,99,23,63,62,15,78,
+
+MagicPatch():0,0,0,0,8,0,0,0,0,0,0,79,26,65,24,29,18,56,77,64,28,64,99,65,64,64,63,62,5,64,0,32,24,10,65,55,44,0,79,47,27,
+MagicFX():7,126,20,30,99,23,63,62,15,3,
+
 //1
 MagicPatch():19,45,84,55,73,29,102,23,3,0,1,37,11,33,126,92,11,47,40,7,1,33,10,110,68,99,11,28,38,56,0,5,66,111,122,56,126,74,62,112,19,
 MagicFX():53,8,40,22,91,111,126,105,32,82,
@@ -699,14 +727,41 @@ seq=3,tempo=320
 37,37,39,40,37,37,39,40,37,37,39,40,37,37,39,40,
 56,56,58,59,56,56,58,59,56,56,58,59,56,56,58,59,
 
-[clouds_patches]
+[clouds_patches_granular]
 
-//pos,	size,	pitch,	density,texture,drywet,	spread, fback,	reverb,	post_gain	
-0.1,	0.5,	4.0,	0.89,	1.3,	1.0,	0.9,	0.4,	1.0,	1.5
-0.1,	0.4,	2.0,	0.89,	1.0,	1.0,	2.9,	0.5,	1.7,	1.5
-0.0,	0.2,	-4.0,	0.89,	1.7,	1.0,	8.9,	0.0,	0.9,	1.0
-0.0,	0.0,	12.0,	0.89,	1.5,	1.0,	11.9,	0.1,	0.5,	0.5
-0.0,	0.1,	0.0,	0.89,	1.5,	1.0,	8.9,	0.1, 	1.0,	0.7
+//pos,		size,		pitch,		density,	texture,	drywet,	spread, 	fback,		reverb,		post_gain	
+0.1,		0.5,		4.0,		0.89,		1.3,		1.0,	0.9,		0.4,		1.0,		1.2
+0.0,		0.2,		0.0,		0.89,		1.7,		0.3,	7.9,		0.1,		0.8,		0.9
+0.1,		0.4,		2.0,		0.89,		1.0,		1.0,	2.9,		0.5,		1.7,		1.2
+0.0,		0.2,		-4.0,		0.89,		1.5,		0.8,	8.9,		0.1,		0.9,		0.5
+0.0,		0.0,		12.0,		0.89,		1.5,		1.0,	11.9,		0.1,		0.5,		0.5
+0.0,		0.1,		0.0,		0.89,		1.5,		1.0,	8.9,		0.1, 		1.0,		0.7
+0.204724,	0.23622,	0.0,		0.732756,	3.968504,	1.0,	7.086615,	0.031181,	0.97,		0.2
+0.100000,	0.5,-14.	0.0,		0.109134,	11.055118,	1.0,	0.9,		0.0,		0.0,		0.3
+0.204724,	0.236220,	0.0,		0.350787,	3.968504,	1.0,	7.086615,	0.031181,	0.562992,	0.25
+0.118110,	0.448819,	0.0,		0.335197,	11.622047,	1.0,	6.236220,	0.038976,	0.866142,	0.2
+
+[clouds_patches_stretch]
+//pos,		size,		pitch,		density,	texture,	drywet,	spread, 	fback,		reverb,		post_gain	
+0.072441,	0.351181,	0.0,		-1.449999,	0.555906,	0.9,	5.173229,	0.381968,	1.1,		0.8
+0.464567,	0.519685,	-12.472441,	0.89,		0.377953,	0.7,	2.346457,	0.452126,	1.54,		0.7
+0.472441,	0.551181,	0.377953,	-1.449999,	0.755906,	0.7,	2.173228,	0.381968,	1.1,		0.8
+0.598425,	0.262205,	-0.779528,	-1.449999,	0.912598,	0.7,	7.007874,	0.414488,	3.99,		0.9
+
+[clouds_patches_looping_delay]
+//pos,		size,		pitch,		density,	texture,	drywet,	spread, 	fback,		reverb,		post_gain	
+0.0,		0.5,		0.0,		0.9,		0.3,		1.0,	2.5,		0.45,		1.5,		0.7
+0.0,		0.3,		0.0,		1.25,		0.4,		0.9,	2.5,		0.55,		1.5,		0.7
+0.346457,	0.283465,	4.535433,	1.417323,	0.3,		0.26,	7.275591,	0.725,		6.173228,	1.6
+0.546457,	0.283465,	4.535433,	1.507323,	0.2,		0.36,	20.0,		0.425,		6.973227,	1.6
+0.598425,	0.598425,	18.141731,	2.456693,	0.456693,	0.37,	5.952756,	0.148,		1.133858,	1.1
+0.291339,	0.299213,	10.204724,	2.834646,	0.401575,	0.338,	5.858268,	0.374,		1.763780,	0.614173
+0.212598,	0.196850,	0.377953,	11.905512,	0.259843,	0.165,	0.188976,	0.117,		0.818898,	0.897638
+0.012598,	0.296850,	3.377953,	11.805510,	0.259843,	0.165,	0.188976,	0.217,		0.818898,	0.897638
+0.149606,	0.354331,	3.023622,	6.519685,	0.338583,	0.992,	2.834646,	0.187,		0.440945,	0.708661
+
+[clouds_patches_spectral]
+0.0,		0.0,		0.0,		0.0,		0.0,		1.0,	0.0,		0.0,		0.0,		1.0
 
 [something_else]
 

@@ -1,29 +1,19 @@
 /*
  * init.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jan 23, 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
-
-#include "init.h"
-#include "gpio.h"
-#include "leds.h"
-#include "codec.h"
-#include "signals.h"
-#include "i2c_encoder_v2.h"
-#include "sha1.h"
-#include "midi.h"
-#include "glo_config.h"
-#include "ui.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -31,14 +21,23 @@
 
 #include <sys/time.h>
 
+#include "init.h"
+#include "gpio.h"
+#include "leds.h"
+#include "codec.h"
+#include "signals.h"
+#include "sha1.h"
+#include "midi.h"
+#include "glo_config.h"
+#include "ui.h"
+
 i2c_port_t i2c_num;
 uint8_t i2c_driver_installed = 0;
 uint8_t i2c_bus_mutex = 0;
 uint8_t glo_run = 0;
 
 int channel_loop = 0,channel_loop_remapped;
-
-uint8_t channel_running = 0;
+int channel_running = 0;
 uint8_t volume_ramp = 0;
 uint8_t beeps_enabled = 1;
 uint8_t sd_playback_channel = 0;
@@ -48,7 +47,11 @@ uint16_t auto_power_off = 0;
 
 uint8_t channel_uses_codec = 1;
 
+size_t i2s_bytes_rw;
+
 int init_free_mem;
+
+float t_start_channel;
 
 const uint8_t acc_orientation_indication[ACC_ORIENTATION_MODES] = {0x15, 0x6d, 0x6b, 0x5b, 0xee, 0x77};
 const uint8_t acc_invert_indication[ACC_INVERT_MODES] = {0x15, 0x2b, 0x2d, 0x5b, 0x35, 0x6b, 0x6d, 0xdb};
@@ -62,32 +65,21 @@ void init_i2s_and_gpio(int buf_count, int buf_len, int sample_rate)
 {
 	printf("Initialize I2S\n");
 
-	i2s_config_t i2s_config = {
+	i2s_driver_config_t i2s_config = {
         .mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX,                    // enable TX and RX
         .sample_rate = sample_rate,
         .bits_per_sample = 16,                                                  //16-bit per channel
+		.bits_per_chan = I2S_BITS_PER_CHAN_DEFAULT,
+		.mclk_multiple = I2S_MCLK_MULTIPLE_DEFAULT,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,                           //2-channels
-        .communication_format = I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S, //I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB,
 #ifdef USE_APLL
 		.use_apll = true,
 #else
 		.use_apll = false,
 #endif
-		//.dma_buf_count = 2,
-		//.dma_buf_count = 4,	//filters
-		//.dma_buf_count = 8,		//clouds
-		//.dma_buf_count = 16,
-		//.dma_buf_count = 32,
 		.dma_buf_count = buf_count,
-
-        //.dma_buf_len = 8,
-        //.dma_buf_len = 16,
-		//.dma_buf_len = 32,
-        //.dma_buf_len = 64,	//filters
-        //.dma_buf_len = 128,
-        //.dma_buf_len = 256,		//clouds
 		.dma_buf_len = buf_len,
-
 		.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1                                //Interrupt level 1
     };
     i2s_pin_config_t pin_config = {
@@ -102,14 +94,14 @@ void init_i2s_and_gpio(int buf_count, int buf_len, int sample_rate)
 		//old wiring, 1.75-1.77 without mod
 		//.bck_io_num = 25,			//bit clock
 		//.ws_io_num = 33,			//byte clock
-        //.data_in_num = 34,			//MISO
-        //.data_out_num = 26,			//MOSI
+        //.data_in_num = 34,		//MISO
+        //.data_out_num = 26,		//MOSI
 
         //new wiring, 1.75 with mod, 1.78
-		.bck_io_num = 17, //25,			//bit clock
+		.bck_io_num = 17,			//bit clock
 		.ws_io_num = 33,			//byte clock
         .data_in_num = 34,			//MISO
-        .data_out_num = 27, //26,			//MOSI
+        .data_out_num = 27,			//MOSI
 
 		#endif
     };
@@ -178,12 +170,9 @@ void enable_I2S_MCLK_clock() {
 	printf("Codec Init: Enabling MCLK...");
 	vTaskDelay(100 / portTICK_RATE_MS);
 
-	//printf("NOT REALLY\n");
-	//return;
-
 	/*
 	periph_module_enable(PERIPH_LEDC_MODULE);
-    ledc_timer_bit_t bit_num = (ledc_timer_bit_t) 2;      // 3 normally
+    ledc_timer_bit_t bit_num = (ledc_timer_bit_t) 2;      //normally 3
     int duty = pow(2, (int) bit_num) / 2;
 
     ledc_timer_config_t timer_conf;
@@ -244,21 +233,18 @@ void enable_I2S_MCLK_clock() {
     mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
 	*/
 
+	//experiments:
 
-    //printf(" [1]");
 	//PIN_FUNC_SELECT(PIN_CTRL, CLK_OUT1_S);
 	//PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
 
-    //printf(" [2]");
 	//REG_WRITE(PIN_CTRL, 0b111111110000);//0xff0
 	////PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1); //enable CLK_OUT1 function
 	//PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[MCLK_GPIO], FUNC_GPIO0_CLK_OUT1); //normally U0TXD, need to change
 
-    //printf(" [3]");
 	//PIN_FUNC_SELECT(PIN_CTRL, CLK_OUT1);
 	//PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
 
-    //printf(" [4]");
 	////PIN_FUNC_SELECT(PIN_CTRL, CLK_OUT3_S);
 	//PIN_FUNC_SELECT(PIN_CTRL, CLK_OUT3);
 	////REG_WRITE(PIN_CTRL, 0b111111111000);//0xff8
@@ -318,6 +304,7 @@ void i2c_master_init(int speed)
     conf.sda_pullup_en = GPIO_PULLUP_DISABLE;//GPIO_PULLUP_ENABLE;
     conf.scl_io_num = I2C_MASTER_SCL_IO;
     conf.scl_pullup_en = GPIO_PULLUP_DISABLE;//GPIO_PULLUP_ENABLE;
+    conf.clk_flags = 0;
 
     if(speed)
     {
@@ -353,7 +340,10 @@ void i2c_master_deinit()
 void i2c_scan_for_devices(int print, uint8_t *addresses, uint8_t *found)
 {
 	int ret;
-	found[0] = 0;
+	if(addresses && found)
+	{
+		found[0] = 0;
+	}
     for(uint16_t address = 0;address<128;address++)
 	{
     	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -370,10 +360,13 @@ void i2c_scan_for_devices(int print, uint8_t *addresses, uint8_t *found)
 			{
 				printf("device responds at address %u\n",address);
 			}
-			if(addresses)
+			if(addresses && found)
 			{
-				addresses[found[0]] = address;
-				found[0]++;
+				if(address)
+				{
+					addresses[found[0]] = address;
+					found[0]++;
+				}
 			}
 			vTaskDelay(1 / portTICK_PERIOD_MS);
 		}
@@ -480,21 +473,6 @@ int i2c_bus_read(int addr_rw, unsigned char *buf, int buf_len)
 	return ret;
 }
 
-void l33tsp34k(char *buffer, int buf_length)
-{
-	char *buf_ptr = buffer;
-	while (buf_ptr < buffer + buf_length)
-	{
-		if (buf_ptr[0]=='o' || buf_ptr[0]=='O') {buf_ptr[0]='0';}
-		if (buf_ptr[0]=='i' || buf_ptr[0]=='I') {buf_ptr[0]='1';}
-		if (buf_ptr[0]=='z' || buf_ptr[0]=='Z') {buf_ptr[0]='2';}
-		if (buf_ptr[0]=='e' || buf_ptr[0]=='E') {buf_ptr[0]='{';}//3';}
-		if (buf_ptr[0]=='a' || buf_ptr[0]=='A') {buf_ptr[0]='@';}//4';}
-		if (buf_ptr[0]=='s' || buf_ptr[0]=='S') {buf_ptr[0]='5';}
-		buf_ptr++;
-	}
-}
-
 void sha1_to_hex(char *code_sha1_hex, uint8_t *code_sha1)
 {
 	char hex_char[3];
@@ -516,17 +494,16 @@ void sha1_to_hex(char *code_sha1_hex, uint8_t *code_sha1)
 		}
 		else
 		{
-			strncpy(code_sha1_hex+(2*i), "00", 2);
+			strncpy(code_sha1_hex+(2*i), "00\0", 3);
 		}
 	}
 	code_sha1_hex[40] = 0;
 }
 
 #ifdef BOARD_GECHO
-const char* GLO_HASH = "1234567890123456789012345678901234567890"; //replace with your unit UID hash for automatic updates
-const char *BINARY_ID = "[0x000000000123]\n\0\0"; //replace with your unit serial number (it's actually a decimal number)
-
-const char* FW_VERSION = "[Gv2/1.0.116]";
+const char *BINARY_ID = "[0x000000001234]\n\0\0";
+const char* FW_VERSION = "[Gv2/1.0.118]";
+const char* GLO_HASH = "f495dc2975eec3287700ad297a9134a037a3a411";
 #endif
 
 uint16_t hardware_check()
@@ -534,15 +511,26 @@ uint16_t hardware_check()
 	uint8_t adr[20];
 	uint8_t found;
 	i2c_scan_for_devices(0, adr, &found);
-	//printf("hardware_check(): found %d i2c devices: ", found);
+	printf("hardware_check(): found %d i2c devices: ", found);
 
-	uint8_t expected[5] = {0x1f,0x38,0x39,0x3b,0x3f};
+	#ifdef BOARD_GECHO_V179
+	#ifdef BOARD_GECHO_V181
+	#define I2C_DEVICES_EXPECTED 4
+	uint8_t expected[I2C_DEVICES_EXPECTED] = {0x18,0x19,0x21,0x27};
+	#else
+	#define I2C_DEVICES_EXPECTED 4
+	uint8_t expected[I2C_DEVICES_EXPECTED] = {0x18,0x19,0x60,0x67};
+	#endif
+	#else
+	#define I2C_DEVICES_EXPECTED 6
+	uint8_t expected[I2C_DEVICES_EXPECTED] = {0x18,0x1f,0x38,0x39,0x3b,0x3f};
+	#endif
 	uint8_t as_expected = 0;
 	uint8_t i2c_errors = 0;
 
 	for(int i=0;i<found;i++)
 	{
-		//printf("%02x ", adr[i]);
+		printf("%02x ", adr[i]);
 		if(adr[i]==expected[i])
 		{
 			as_expected++;
@@ -552,13 +540,14 @@ uint16_t hardware_check()
 			i2c_errors += 1<<i;
 		}
 	}
-	//printf("\n");
+	printf("\n");
 
-	//printf("as_expected = %d\n", as_expected);
+	printf("hardware_check(): as_expected = %d\n", as_expected);
 
-	if(found!=5 || as_expected!=5)
+	if(found!=I2C_DEVICES_EXPECTED || as_expected!=I2C_DEVICES_EXPECTED)
 	{
-		return i2c_errors + (found << 8);
+		printf("hardware_check(): errors found!\n");
+		return i2c_errors + ((I2C_DEVICES_EXPECTED-found) << 8);
 	}
 	else
 	{
@@ -771,14 +760,6 @@ void spdif_transceiver_init()
 }
 */
 
-void generate_random_seed()
-{
-	//randomize the pseudo RNG seed
-	bootloader_random_enable();
-	set_pseudo_random_seed((double)esp_random() / (double)UINT32_MAX);
-	bootloader_random_disable();
-}
-
 #ifdef BOARD_WHALE
 void whale_test_RGB()
 {
@@ -833,11 +814,21 @@ void whale_test_RGB()
 
 #ifdef BOARD_GECHO
 
+#ifdef BOARD_GECHO_V179
+#ifdef BOARD_GECHO_V181
+#define EXP1_I2C_ADDRESS 0x21 //33
+#define EXP2_I2C_ADDRESS 0x27 //39
+#else
+#define EXP1_I2C_ADDRESS 0x60 //96
+#define EXP2_I2C_ADDRESS 0x67 //103
+#endif
+#else
 //PCA9554A at 0x38, 0x39, 0x3B, 0x3F
 #define EXP1_I2C_ADDRESS 0x38 //56
 #define EXP2_I2C_ADDRESS 0x3B //59
 #define EXP3_I2C_ADDRESS 0x39 //57
 #define EXP4_I2C_ADDRESS 0x3F //63
+#endif
 
 void LED_exp_send_address(i2c_cmd_handle_t cmd, uint8_t rw_bit, int exp_no)
 {
@@ -849,6 +840,7 @@ void LED_exp_send_address(i2c_cmd_handle_t cmd, uint8_t rw_bit, int exp_no)
     {
     	i2c_master_write_byte(cmd, EXP2_I2C_ADDRESS << 1 | rw_bit, ACK_CHECK_EN);
     }
+	#ifndef BOARD_GECHO_V179
     else if(exp_no==3)
     {
     	i2c_master_write_byte(cmd, EXP3_I2C_ADDRESS << 1 | rw_bit, ACK_CHECK_EN);
@@ -857,6 +849,7 @@ void LED_exp_send_address(i2c_cmd_handle_t cmd, uint8_t rw_bit, int exp_no)
     {
     	i2c_master_write_byte(cmd, EXP4_I2C_ADDRESS << 1 | rw_bit, ACK_CHECK_EN);
     }
+	#endif
 }
 
 void LED_exp_2_byte_cmd(uint8_t b1, uint8_t b2, int exp_no)
@@ -868,6 +861,23 @@ void LED_exp_2_byte_cmd(uint8_t b1, uint8_t b2, int exp_no)
 
     i2c_master_write_byte(cmd, b1, ACK_CHECK_EN);
     i2c_master_write_byte(cmd, b2, ACK_CHECK_EN);
+    i2c_master_stop(cmd);
+    /*int ret =*/ i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+}
+
+void LED_exp_multi_byte_cmd(uint8_t reg, uint8_t *bytes, uint8_t count, int exp_no)
+{
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+
+    LED_exp_send_address(cmd, WRITE_BIT, exp_no);
+
+    i2c_master_write_byte(cmd, reg, ACK_CHECK_EN);
+    for(int i=0;i<count;i++)
+    {
+    	i2c_master_write_byte(cmd, bytes[i], ACK_CHECK_EN);
+    }
     i2c_master_stop(cmd);
     /*int ret =*/ i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
@@ -893,6 +903,23 @@ uint8_t LED_exp_read_register(uint8_t reg, int exp_no)
     return val;
 }
 
+void LED_exp_read_two_registers(uint8_t reg, int exp_no, uint8_t *d1, uint8_t *d2)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    i2c_master_start(cmd);
+    LED_exp_send_address(cmd, WRITE_BIT, exp_no);
+    i2c_master_write_byte(cmd, reg, ACK_CHECK_EN);
+
+    i2c_master_start(cmd);
+    LED_exp_send_address(cmd, READ_BIT, exp_no);
+    i2c_master_read_byte(cmd, d1, I2C_MASTER_ACK);
+    i2c_master_read_byte(cmd, d2, I2C_MASTER_NACK);
+    i2c_master_stop(cmd);
+    /*int ret =*/ i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+}
+
 unsigned char byte_bit_reverse(unsigned char b) {
    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
@@ -907,13 +934,20 @@ void process_expanders(void *pvParameters)
 	printf("process_expanders(): task running on core ID=%d\n",xPortGetCoreID());
 
 	uint8_t tmp;
-	uint8_t reg;
+	uint8_t reg,reg2,reg3,LEDs_changed;
 	//int was_int = 0;
+
+	#ifdef BOARD_GECHO_V179
+	#ifndef BOARD_GECHO_V181
+	for(int i=0;i<EXPANDERS*2;i++)
+	{
+		exp_bits[i] = 0x55; //LEDs are Off by default, GPIOs at input
+	}
+	#endif
+	#endif
 
 	while(1)
 	{
-		i2c_bus_mutex = 0;
-
 		Delay(EXPANDERS_TIMING_DELAY);
 
 		if(i2c_bus_mutex)
@@ -922,6 +956,176 @@ void process_expanders(void *pvParameters)
 		}
 		i2c_bus_mutex = 1;
 
+		#ifdef BOARD_GECHO_V179
+
+		/*
+		reg = ~LED_exp_read_register(0x00, 2); //expander #2 (top) has two buttons connected
+		//printf("exp #2 reg 0/1: %02x - ", reg);
+		reg2 = ~LED_exp_read_register(0x01, 2);
+		//printf("%02x\t", reg2);
+		*/
+
+		//read both registers at once
+		LED_exp_read_two_registers(0x00, 2, &reg, &reg2);
+		reg = ~reg;
+		reg2 = ~reg2;
+
+		//ff,ff vs. fd,7f when pressed
+
+		//reg0 = LED_exp_read_register(0x00, 1); //expander #1 (bottom) has four buttons connected
+		//printf("exp #1 reg 0/1: %02x - ", reg0);
+		reg3 = ~LED_exp_read_register(0x01, 1);
+		//printf("%02x\n", reg3);
+
+		//ef-df-bf-7f when pressed
+
+		Buttons_bits = ((reg2>>7)&0x01) | ((reg<<4)&0x20) | (reg3&0x10) | ((reg3>>2)&0x08)| ((reg3>>4)&0x04)| ((reg3>>6)&0x02);
+		//printf("process_expanders(): Buttons_bits = %x\n", Buttons_bits);
+
+		if(!persistent_settings.ALL_LEDS_OFF)
+		{
+			//==== LEDs ===============================================================================
+
+			LEDs_changed = 0;
+
+			//B1B2W1W2,B3B4W3W4,W5-W8,B(1-4),B5R7R8,R5R6O3O4,R3R4O1O2,RDY-R1R2
+
+			for(int i=0;i<EXPANDERS;i++)
+			if(LED_bits[i]!=LED_bits[i+EXPANDERS])
+			{
+				LEDs_changed++;
+
+				#ifndef BOARD_GECHO_V181
+
+				if(i==MAP_ORANGE_LEDS)
+				{
+					//higher 5 bits in orange register, order = 1,2,3,4,RDY
+					if(LED_bits[MAP_ORANGE_LEDS]&0x80) { exp_bits[6] &= 0xf3; } else { exp_bits[6] |= 0x04; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x40) { exp_bits[6] &= 0xfc; } else { exp_bits[6] |= 0x01; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x20) { exp_bits[5] &= 0x3f; } else { exp_bits[5] |= 0x40; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x10) { exp_bits[5] &= 0xcf; } else { exp_bits[5] |= 0x10; }
+
+					//RDY
+					if(LED_bits[MAP_ORANGE_LEDS]&0x08) { exp_bits[7] &= 0xcf; } else { exp_bits[7] |= 0x10; }
+				}
+
+				if(i==MAP_RED_LEDS)
+				{
+
+					if(LED_bits[MAP_RED_LEDS]&0x80) { exp_bits[7] &= 0xf3; } else { exp_bits[7] |= 0x04; } //R1
+					if(LED_bits[MAP_RED_LEDS]&0x40) { exp_bits[7] &= 0xfc; } else { exp_bits[7] |= 0x01; } //R2
+					if(LED_bits[MAP_RED_LEDS]&0x20) { exp_bits[6] &= 0x3f; } else { exp_bits[6] |= 0x40; } //R3
+					if(LED_bits[MAP_RED_LEDS]&0x10) { exp_bits[6] &= 0xcf; } else { exp_bits[6] |= 0x10; } //R4
+					if(LED_bits[MAP_RED_LEDS]&0x08) { exp_bits[5] &= 0xf3; } else { exp_bits[5] |= 0x04; } //R5
+					if(LED_bits[MAP_RED_LEDS]&0x04) { exp_bits[5] &= 0xfc; } else { exp_bits[5] |= 0x01; } //R6
+					if(LED_bits[MAP_RED_LEDS]&0x02) { exp_bits[4] &= 0x3f; } else { exp_bits[4] |= 0x40; } //R7
+					if(LED_bits[MAP_RED_LEDS]&0x01) { exp_bits[4] &= 0xcf; } else { exp_bits[4] |= 0x10; } //R8
+				}
+
+				if(i==MAP_WHITE_LEDS)
+				{
+					if(LED_bits[MAP_WHITE_LEDS]&0x80) { exp_bits[0] &= 0xcf; } else { exp_bits[0] |= 0x10; } //W1
+					if(LED_bits[MAP_WHITE_LEDS]&0x40) { exp_bits[0] &= 0x3f; } else { exp_bits[0] |= 0x40; } //W2
+					if(LED_bits[MAP_WHITE_LEDS]&0x20) { exp_bits[1] &= 0xfc; } else { exp_bits[1] |= 0x01; } //W3
+					if(LED_bits[MAP_WHITE_LEDS]&0x10) { exp_bits[1] &= 0xf3; } else { exp_bits[1] |= 0x04; } //W4
+					if(LED_bits[MAP_WHITE_LEDS]&0x08) { exp_bits[2] &= 0x3f; } else { exp_bits[2] |= 0x40; } //W5
+					if(LED_bits[MAP_WHITE_LEDS]&0x04) { exp_bits[2] &= 0xcf; } else { exp_bits[2] |= 0x10; } //W6
+					if(LED_bits[MAP_WHITE_LEDS]&0x02) { exp_bits[2] &= 0xf3; } else { exp_bits[2] |= 0x04; } //W7
+					if(LED_bits[MAP_WHITE_LEDS]&0x01) { exp_bits[2] &= 0xfc; } else { exp_bits[2] |= 0x01; } //W8
+				}
+
+				if(i==MAP_BLUE_LEDS)
+				{
+					if(LED_bits[MAP_BLUE_LEDS]&0x80) { exp_bits[0] &= 0xfc; } else { exp_bits[0] |= 0x01; } //B1
+					if(LED_bits[MAP_BLUE_LEDS]&0x40) { exp_bits[0] &= 0xf3; } else { exp_bits[0] |= 0x04; } //B2
+					if(LED_bits[MAP_BLUE_LEDS]&0x20) { exp_bits[1] &= 0xcf; } else { exp_bits[1] |= 0x10; } //B3
+					if(LED_bits[MAP_BLUE_LEDS]&0x10) { exp_bits[1] &= 0x3f; } else { exp_bits[1] |= 0x40; } //B4
+					if(LED_bits[MAP_BLUE_LEDS]&0x08) { exp_bits[4] &= 0xfc; } else { exp_bits[4] |= 0x01; } //B5
+				}
+
+				#else
+
+				if(i==MAP_ORANGE_LEDS)
+				{
+					if(LED_bits[MAP_ORANGE_LEDS]&0x80) { exp_bits[5] &= 0xfd; } else { exp_bits[5] |= 0x02; } //O1 -> IO1.1
+					if(LED_bits[MAP_ORANGE_LEDS]&0x40) { exp_bits[5] &= 0xfe; } else { exp_bits[5] |= 0x01; } //O2 -> IO1.0
+					if(LED_bits[MAP_ORANGE_LEDS]&0x20) { exp_bits[4] &= 0x7f; } else { exp_bits[4] |= 0x80; } //O3 -> IO0.7
+					if(LED_bits[MAP_ORANGE_LEDS]&0x10) { exp_bits[4] &= 0xbf; } else { exp_bits[4] |= 0x40; } //O4 -> IO0.6
+
+					//RDY
+					if(LED_bits[MAP_ORANGE_LEDS]&0x08) { exp_bits[5] &= 0xbf; } else { exp_bits[5] |= 0x40; } //RDY!
+				}
+
+				if(i==MAP_RED_LEDS)
+				{
+					if(LED_bits[MAP_RED_LEDS]&0x80) { exp_bits[5] &= 0xdf; } else { exp_bits[5] |= 0x20; } //R1!
+					if(LED_bits[MAP_RED_LEDS]&0x40) { exp_bits[5] &= 0xef; } else { exp_bits[5] |= 0x10; } //R2!
+					if(LED_bits[MAP_RED_LEDS]&0x20) { exp_bits[5] &= 0xf7; } else { exp_bits[5] |= 0x08; } //R3!
+					if(LED_bits[MAP_RED_LEDS]&0x10) { exp_bits[5] &= 0xfb; } else { exp_bits[5] |= 0x04; } //R4!
+					if(LED_bits[MAP_RED_LEDS]&0x08) { exp_bits[4] &= 0xdf; } else { exp_bits[4] |= 0x20; } //R5!
+					if(LED_bits[MAP_RED_LEDS]&0x04) { exp_bits[4] &= 0xef; } else { exp_bits[4] |= 0x10; } //R6!
+					if(LED_bits[MAP_RED_LEDS]&0x02) { exp_bits[4] &= 0xf7; } else { exp_bits[4] |= 0x08; } //R7!
+					if(LED_bits[MAP_RED_LEDS]&0x01) { exp_bits[4] &= 0xfb; } else { exp_bits[4] |= 0x04; } //R8!
+				}
+
+				if(i==MAP_WHITE_LEDS)
+				{
+					if(LED_bits[MAP_WHITE_LEDS]&0x80) { exp_bits[0] &= 0xfb; } else { exp_bits[0] |= 0x04; } //W1!
+					if(LED_bits[MAP_WHITE_LEDS]&0x40) { exp_bits[0] &= 0xf7; } else { exp_bits[0] |= 0x08; } //W2!
+					if(LED_bits[MAP_WHITE_LEDS]&0x20) { exp_bits[0] &= 0xef; } else { exp_bits[0] |= 0x10; } //W3!
+					if(LED_bits[MAP_WHITE_LEDS]&0x10) { exp_bits[0] &= 0xdf; } else { exp_bits[0] |= 0x20; } //W4!
+					if(LED_bits[MAP_WHITE_LEDS]&0x08) { exp_bits[1] &= 0xf7; } else { exp_bits[1] |= 0x08; } //W5!
+					if(LED_bits[MAP_WHITE_LEDS]&0x04) { exp_bits[1] &= 0xfb; } else { exp_bits[1] |= 0x04; } //W6!
+					if(LED_bits[MAP_WHITE_LEDS]&0x02) { exp_bits[1] &= 0xfd; } else { exp_bits[1] |= 0x02; } //W7!
+					if(LED_bits[MAP_WHITE_LEDS]&0x01) { exp_bits[1] &= 0xfe; } else { exp_bits[1] |= 0x01; } //W8!
+				}
+
+				if(i==MAP_BLUE_LEDS)
+				{
+					if(LED_bits[MAP_BLUE_LEDS]&0x80) { exp_bits[0] &= 0xfe; } else { exp_bits[0] |= 0x01; } //B1!
+					if(LED_bits[MAP_BLUE_LEDS]&0x40) { exp_bits[0] &= 0xfd; } else { exp_bits[0] |= 0x02; } //B2!
+					if(LED_bits[MAP_BLUE_LEDS]&0x20) { exp_bits[0] &= 0xbf; } else { exp_bits[0] |= 0x40; } //B3!
+					if(LED_bits[MAP_BLUE_LEDS]&0x10) { exp_bits[0] &= 0x7f; } else { exp_bits[0] |= 0x80; } //B4!
+					if(LED_bits[MAP_BLUE_LEDS]&0x08) { exp_bits[4] &= 0xfe; } else { exp_bits[4] |= 0x01; } //B5!
+				}
+
+				#endif
+
+				LED_bits[i+EXPANDERS] = LED_bits[i];
+			}
+
+			if(LEDs_changed) //just check if any of the LEDs status changed, otherwise no need to update anything
+			{
+				//more optimal, setting all 4 registers in each expander at once
+				for(int e=0;e<EXPANDERS/2;e++) //expander no. (2 bits per signal)
+				{
+					#ifdef BOARD_GECHO_V181
+					//LED_exp_multi_byte_cmd(PCA9555_LED_REGS, exp_bits+(e*EXPANDERS), 1, e+1);
+					//LED_exp_multi_byte_cmd(PCA9555_LED_REGS+1, exp_bits+1+(e*EXPANDERS), 1, e+1);
+					//PCA9555 supports multi register writes too
+					LED_exp_multi_byte_cmd(PCA9555_LED_REGS, exp_bits+(e*EXPANDERS), 2, e+1);
+					#else
+					//PCA9552 supports multi register writes
+					LED_exp_multi_byte_cmd(PCA9552_LED_REGS+PCA9552_AUTO_INC_FLAG, exp_bits+(e*EXPANDERS), 2, e+1); //write 2 regs at once
+					#endif
+				}
+				//LED_exp_multi_byte_cmd(PCA9552_LED_REGS+PCA9552_AUTO_INC_FLAG, exp_bits, 2, 1);
+				//LED_exp_multi_byte_cmd(PCA9552_LED_REGS+PCA9552_AUTO_INC_FLAG, exp_bits+EXPANDERS, 2, 2);
+
+				/*
+				//less optimal, setting each register one by one
+				for(int i=0;i<EXPANDERS;i++)
+				{
+					LED_exp_2_byte_cmd(PCA9552_LED_REGS+i,exp_bits[i],1);
+					LED_exp_2_byte_cmd(PCA9552_LED_REGS+i,exp_bits[i+EXPANDERS],2);
+				}
+				*/
+			}
+
+			//=========================================================================================
+		}
+
+		#else
 		/*
 		//check for INT from 4th expander (active low)
 		if(!gpio_get_level(EXP4_INT))
@@ -941,64 +1145,67 @@ void process_expanders(void *pvParameters)
 		}*/
 		//printf("process_expanders(): Buttons_bits = %x\n", Buttons_bits);
 
-		if(persistent_settings.ALL_LEDS_OFF)
+		if(!persistent_settings.ALL_LEDS_OFF)
 		{
-			continue;
+
+			for(int i=0;i<EXPANDERS;i++)
+			if(LED_bits[i]!=LED_bits[i+EXPANDERS])
+			{
+				if(i==MAP_RED_LEDS)
+				{
+					//direct mapping, just reversed
+					exp_bits[EXP_RED_LEDS] = byte_bit_reverse(LED_bits[MAP_RED_LEDS]);
+				}
+
+				if(i==MAP_WHITE_LEDS)
+				{
+					//first 4 need reversing, last 4 good
+					tmp = 0xf0 & byte_bit_reverse(LED_bits[MAP_WHITE_LEDS]>>4);
+					exp_bits[EXP_WHITE_LEDS] = tmp | (LED_bits[MAP_WHITE_LEDS] & 0x0f);
+				}
+
+				if(i==MAP_ORANGE_LEDS)
+				{
+					//last 5 bits in orange register, order = 1,4,3,2,RDY
+					if(LED_bits[MAP_ORANGE_LEDS]&0x80) { exp_bits[EXP_ORANGE_LEDS] |= 0x10; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xef; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x40) { exp_bits[EXP_ORANGE_LEDS] |= 0x02; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfd; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x20) { exp_bits[EXP_ORANGE_LEDS] |= 0x04; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfb; }
+					if(LED_bits[MAP_ORANGE_LEDS]&0x10) { exp_bits[EXP_ORANGE_LEDS] |= 0x08; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xf7; }
+					//RDY
+					if(LED_bits[MAP_ORANGE_LEDS]&0x08) { exp_bits[EXP_ORANGE_LEDS] |= 0x01; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfe; }
+				}
+
+				if(i==MAP_GREEN_LEDS)
+				{
+					//1,2 are first in green register
+					exp_bits[EXP_GREEN_LEDS] = LED_bits[MAP_GREEN_LEDS] & 0xc0;
+
+					//3,4,5 are first in orange register
+					tmp = 0xe0 & LED_bits[MAP_GREEN_LEDS]<<2;
+					exp_bits[EXP_ORANGE_LEDS] = (exp_bits[EXP_ORANGE_LEDS] & 0x1f) | tmp;
+				}
+
+				LED_bits[i+EXPANDERS] = LED_bits[i];
+			}
+
+
+			for(int i=0;i<EXPANDERS;i++)
+			if(exp_bits[i]!=exp_bits[i+EXPANDERS])
+			{
+				//printf("expander bits #%d changed, updating\n", i);
+				LED_exp_2_byte_cmd(0x01,~exp_bits[i],i+1);
+				exp_bits[i+EXPANDERS] = exp_bits[i];
+			}
 		}
+		#endif
 
-		for(int i=0;i<EXPANDERS;i++)
-		if(LED_bits[i]!=LED_bits[i+EXPANDERS])
-		{
-			if(i==MAP_RED_LEDS)
-			{
-				//direct mapping, just reversed
-				exp_bits[EXP_RED_LEDS] = byte_bit_reverse(LED_bits[MAP_RED_LEDS]);
-			}
-
-			if(i==MAP_WHITE_LEDS)
-			{
-				//first 4 need reversing, last 4 good
-				tmp = 0xf0 & byte_bit_reverse(LED_bits[MAP_WHITE_LEDS]>>4);
-				exp_bits[EXP_WHITE_LEDS] = tmp | (LED_bits[MAP_WHITE_LEDS] & 0x0f);
-			}
-
-			if(i==MAP_ORANGE_LEDS)
-			{
-				//last 5 bits in orange register, order = 1,4,3,2,RDY
-				if(LED_bits[MAP_ORANGE_LEDS]&0x80) { exp_bits[EXP_ORANGE_LEDS] |= 0x10; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xef; }
-				if(LED_bits[MAP_ORANGE_LEDS]&0x40) { exp_bits[EXP_ORANGE_LEDS] |= 0x02; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfd; }
-				if(LED_bits[MAP_ORANGE_LEDS]&0x20) { exp_bits[EXP_ORANGE_LEDS] |= 0x04; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfb; }
-				if(LED_bits[MAP_ORANGE_LEDS]&0x10) { exp_bits[EXP_ORANGE_LEDS] |= 0x08; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xf7; }
-				//RDY
-				if(LED_bits[MAP_ORANGE_LEDS]&0x08) { exp_bits[EXP_ORANGE_LEDS] |= 0x01; } else { exp_bits[EXP_ORANGE_LEDS] &= 0xfe; }
-			}
-
-			if(i==MAP_GREEN_LEDS)
-			{
-				//1,2 are first in green register
-				exp_bits[EXP_GREEN_LEDS] = LED_bits[MAP_GREEN_LEDS] & 0xc0;
-
-				//3,4,5 are first in orange register
-				tmp = 0xe0 & LED_bits[MAP_GREEN_LEDS]<<2;
-				exp_bits[EXP_ORANGE_LEDS] = (exp_bits[EXP_ORANGE_LEDS] & 0x1f) | tmp;
-			}
-
-			LED_bits[i+EXPANDERS] = LED_bits[i];
-		}
-
-
-		for(int i=0;i<EXPANDERS;i++)
-		if(exp_bits[i]!=exp_bits[i+EXPANDERS])
-		{
-			//printf("expander bits #%d changed, updating\n", i);
-			LED_exp_2_byte_cmd(0x01,~exp_bits[i],i+1);
-			exp_bits[i+EXPANDERS] = exp_bits[i];
-		}
+		i2c_bus_mutex = 0;
 	}
 }
 
 void gecho_LED_expander_init()
 {
+	#ifndef BOARD_GECHO_V179 //there is no init required for PCA9552PW
 	printf("gecho_LED_expander_init()\n");
 	LED_exp_2_byte_cmd(0x03,0x00,1);
 	LED_exp_2_byte_cmd(0x02,0x00,1);
@@ -1012,19 +1219,136 @@ void gecho_LED_expander_init()
 	LED_exp_2_byte_cmd(0x03,0x3f,4); //00x11111 -> two blue LEDs, n/a, buttons 1-4, SET button
 	LED_exp_2_byte_cmd(0x02,0x00,4);
 	LED_exp_2_byte_cmd(0x01,0xff,4);
+	#endif
 
-	memset(exp_bits,0,8);	//clear expanders I/O map bits
-	memset(LED_bits,0,8);	//clear LEDs map bits
+	#ifdef BOARD_GECHO_V181
+	memset(exp_bits,0xff,EXPANDERS*2);	//clear expanders I/O map bits (reverse logic, LED off = 1)
+	#else
+	memset(exp_bits,0,EXPANDERS*2);	//clear expanders I/O map bits
+	#endif
+
+	memset(LED_bits,0,EXPANDERS*2);	//clear LEDs map bits
 	Buttons_bits = 0;
 
+	#ifdef BOARD_GECHO_V179
+
+	uint8_t reg;
+
+	while(i2c_bus_mutex)
+	{
+		Delay(10);
+	}
+	i2c_bus_mutex = 1;
+
+	#ifndef BOARD_GECHO_V181
+
+	//LEDs Off, configure as input
+	LED_exp_2_byte_cmd(6,0x55,1);
+	LED_exp_2_byte_cmd(7,0x55,1);
+	LED_exp_2_byte_cmd(8,0x55,1);
+	LED_exp_2_byte_cmd(9,0x55,1);
+	LED_exp_2_byte_cmd(6,0x55,2);
+	LED_exp_2_byte_cmd(7,0x55,2);
+	LED_exp_2_byte_cmd(8,0x55,2);
+	LED_exp_2_byte_cmd(9,0x55,2);
+
+	#else
+
+	//PCA9555 uses one-bit config registers
+
+	//configure accordingly
+	LED_exp_2_byte_cmd(6,0x00,1);
+	LED_exp_2_byte_cmd(7,0xf0,1);
+	LED_exp_2_byte_cmd(6,0x02,2);
+	LED_exp_2_byte_cmd(7,0x80,2);
+
+	/*
+	//all LEDs off
+	LED_exp_2_byte_cmd(2,0xff,1);
+	LED_exp_2_byte_cmd(3,0xff,1);
+	LED_exp_2_byte_cmd(2,0xff,2);
+	LED_exp_2_byte_cmd(3,0xff,2);
+
+	//configure all as input
+	LED_exp_2_byte_cmd(6,0xff,1);
+	LED_exp_2_byte_cmd(7,0xff,1);
+	LED_exp_2_byte_cmd(6,0xff,2);
+	LED_exp_2_byte_cmd(7,0xff,2);
+	//polarity inversion
+	LED_exp_2_byte_cmd(4,0xff,1);
+	LED_exp_2_byte_cmd(5,0xff,1);
+	LED_exp_2_byte_cmd(4,0xff,2);
+	LED_exp_2_byte_cmd(5,0xff,2);
+	//no polarity inversion
+	LED_exp_2_byte_cmd(4,0x00,1);
+	LED_exp_2_byte_cmd(5,0x00,1);
+	LED_exp_2_byte_cmd(4,0x00,2);
+	LED_exp_2_byte_cmd(5,0x00,2);
+	*/
+	#endif
+
+	reg = LED_exp_read_register(0x06, 1); //expander #1 (bottom)
+	printf("exp #1 reg 6-9: %02x - ", reg);
+	reg = LED_exp_read_register(0x07, 1); //expander #1 (bottom)
+	printf("%02x - ", reg);
+	#ifndef BOARD_GECHO_V181
+	reg = LED_exp_read_register(0x08, 1); //expander #1 (bottom)
+	printf("%02x - ", reg);
+	reg = LED_exp_read_register(0x09, 1); //expander #1 (bottom)
+	printf("%02x\n", reg);
+	#endif
+
+	reg = LED_exp_read_register(0x06, 2); //expander #2 (top)
+	printf("exp #2 reg 6-9: %02x - ", reg);
+	reg = LED_exp_read_register(0x07, 2); //expander #2 (top)
+	printf("%02x - ", reg);
+	#ifndef BOARD_GECHO_V181
+	reg = LED_exp_read_register(0x08, 2); //expander #2 (top)
+	printf("%02x - ", reg);
+	reg = LED_exp_read_register(0x09, 2); //expander #2 (top)
+	printf("%02x\n", reg);
+	#endif
+
+	i2c_bus_mutex = 0;
+
+	#endif
+
+	//#ifndef BOARD_GECHO_V179 //TODO
 	printf("gecho_LED_expander_init(): starting process_expanders task\n");
-	xTaskCreatePinnedToCore((TaskFunction_t)&process_expanders, "process_expanders_task", 2048, NULL, 10, NULL, 1);
+	xTaskCreatePinnedToCore((TaskFunction_t)&process_expanders, "process_expanders_task", 2048, NULL, PRIORITY_EXPANDERS_TASK, NULL, CPU_CORE_EXPANDERS_TASK);
+	//#endif
 }
 
 void gecho_LED_expander_test()
 {
+	printf("gecho_LED_expander_test()\n");
 	while(1)
 	{
+		//printf(".\n");
+
+		#ifdef BOARD_GECHO_V179
+
+		printf("gecho_LED_expander_test() loop start\n");
+
+		for(int e=1;e<=2;e++) //expander no.
+		{
+			#ifndef BOARD_GECHO_V181
+			for(int i=0;i<4;i++) //segment no.
+			{
+				LED_exp_2_byte_cmd(PCA9552_LED_REGS+i,0x00,e); //LEDs On
+				Delay(250);
+				LED_exp_2_byte_cmd(PCA9552_LED_REGS+i,0x55,e); //LEDs Off
+				Delay(50);
+			}
+			#endif
+		}
+		printf("gecho_LED_expander_test() loop end\n");
+		Delay(1000);
+
+		//B1B2W1W2,B3B4W3W4,W5-W8,B(1-4),B5R7R8,R5R6O3O4,R3R4O1O2,RDY-R1R2
+
+		#else
+
 		//8 red
 		LED_bits[MAP_RED_LEDS] = 0x80; //first red LED on
 		Delay(LED_TEST_DELAY);
@@ -1064,6 +1388,8 @@ void gecho_LED_expander_test()
 			Delay(LED_TEST_DELAY);
 		}
 		LED_bits[MAP_WHITE_LEDS] = 0; //all white LEDs off
+
+		#endif
 	}
 }
 
@@ -1281,7 +1607,7 @@ void gecho_init_MIDI(int uart_num, int midi_out_enabled)
 	#ifdef MIDI_OUT_ENABLED
 	//optional MIDI Out via GPIO27 and the same connector
 	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, MIDI_OUT_SIGNAL, MIDI_IN_SIGNAL, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-	ESP_ERROR_CHECK(uart_set_line_inverse(MIDI_UART, UART_INVERSE_TXD));
+	ESP_ERROR_CHECK(uart_set_line_inverse(MIDI_UART, UART_SIGNAL_TXD_INV)); //UART_INVERSE_TXD));
 	#else
 	//test midi signal reception at alternative pin #18 (instead of default U2RXD #16)
 	ESP_ERROR_CHECK(uart_set_pin(MIDI_UART, 17, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
@@ -1406,141 +1732,6 @@ void gecho_test_MIDI_output()
 			printf("UART[%d] sent %d bytes: %02x %02x %02x\n", MIDI_UART, length, note[i][0], note[i][1], note[i][2]);
 			Delay(500);
 		}
-	}
-}
-
-
-#define ENCODER1_I2C_ADDRESS 0x20
-
-void rotary_encoder_write_reg(uint8_t reg, uint8_t val, int encoder_id)
-{
-	printf("rotary_encoder_write_reg(%x,%x,%d)\n",reg,val,encoder_id);
-
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-
-    if(encoder_id==0)
-    {
-    	i2c_master_write_byte(cmd, ENCODER1_I2C_ADDRESS << 1 | WRITE_BIT, ACK_CHECK_EN);
-    }
-
-    i2c_master_write_byte(cmd, reg, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, val, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    int ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-
-    printf("rotary_encoder_write_reg() result = %d\n", ret);
-}
-
-int rotary_encoder_read(uint8_t reg, uint8_t *buf, int bytes, int encoder_id)
-{
-	//printf("rotary_encoder_read(%x,&buffer,%d,%d)\n",reg,bytes,encoder_id);
-
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-
-    if(encoder_id==0)
-    {
-    	i2c_master_write_byte(cmd, ENCODER1_I2C_ADDRESS << 1 | WRITE_BIT, ACK_CHECK_EN);
-    }
-
-    i2c_master_write_byte(cmd, reg, ACK_CHECK_EN);
-    i2c_master_stop(cmd);
-    int ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-
-    if(ret!=ESP_OK)
-    {
-    	return ret;
-    }
-
-	cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-
-    if(encoder_id==0)
-    {
-    	i2c_master_write_byte(cmd, ENCODER1_I2C_ADDRESS << 1 | READ_BIT, ACK_CHECK_EN);
-    }
-
-    i2c_master_read(cmd, buf, bytes, I2C_MASTER_LAST_NACK);
-    i2c_master_stop(cmd);
-    ret = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-
-    return ret;
-}
-
-uint8_t rotary_encoder_read_byte(uint8_t reg, int encoder_id)
-{
-	//printf("rotary_encoder_read_byte(%x,%d)\n",reg,encoder_id);
-
-    uint8_t val;
-    /*int ret =*/ rotary_encoder_read(reg, &val, 1, encoder_id);
-
-    //printf("rotary_encoder_read_byte() result = %d, val = %x\n", ret, val);
-    return val;
-}
-
-uint32_t rotary_encoder_read_dword(uint8_t reg, int encoder_id)
-{
-	//printf("rotary_encoder_read_dword(%x,%d)\n",reg,encoder_id);
-
-    uint32_t val;
-    uint8_t buf[8];
-
-    /*int ret =*/ rotary_encoder_read(reg, buf, 4, encoder_id);
-
-    buf[4]=buf[2];
-    buf[5]=buf[1];
-    buf[6]=buf[0];
-    memcpy(&val,buf+3,4);
-
-    //printf("rotary_encoder_read_dword() result = %d, val = %x\n", ret, val);
-    return val;
-}
-
-void rotary_encoder_init()
-{
-	rotary_encoder_write_reg(REG_GCONF, INT_DATA | WRAP_ENABLE | DIRE_RIGHT | IPUP_ENABLE | RMOD_X1 | RGB_ENCODER, 0); //init
-
-	rotary_encoder_write_reg(REG_FADERGB, 0x04, 0);		//set RGB LED fade timer
-
-	rotary_encoder_write_reg(REG_CMAXB4, 0x00, 0);		//set max range to 65535
-	rotary_encoder_write_reg(REG_CMAXB3, 0x00, 0);
-	rotary_encoder_write_reg(REG_CMAXB2, 0xff, 0);
-	rotary_encoder_write_reg(REG_CMAXB1, 0xff, 0);
-	rotary_encoder_write_reg(REG_CMINB4, 0x00, 0);		//set min range to 0
-	rotary_encoder_write_reg(REG_CMINB3, 0x00, 0);
-	rotary_encoder_write_reg(REG_CMINB2, 0x00, 0);
-	rotary_encoder_write_reg(REG_CMINB1, 0x00, 0);
-	//rotary_encoder_write_reg(REG_DPPERIOD, 0x20, 0);	//set double click period
-}
-
-void rotary_encoder_test()
-{
-	for (int i=0;i<2;i++)
-	{
-		rotary_encoder_write_reg(REG_RLED, 0x40, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_GLED, 0x80, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_BLED, 0xa0, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_RLED, 0x00, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_GLED, 0x00, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_BLED, 0x00, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_RLED, 0xff, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_GLED, 0xff, 0);		Delay(LED_TEST_DELAY);
-		rotary_encoder_write_reg(REG_BLED, 0xff, 0);		Delay(LED_TEST_DELAY);
-	}
-
-	uint32_t pos;
-	uint8_t status;
-
-	while(1)
-	{
-		pos = rotary_encoder_read_dword(REG_CVALB4, 0);
-		status = rotary_encoder_read_byte(REG_ESTATUS, 0);
-		printf("pos = %d, status = %x\n", pos, status);
-		Delay(100);
 	}
 }
 
@@ -1903,7 +2094,7 @@ void show_board_serial_no()
 	ui_ignore_events = 1;
 	display_BCD_numbers((char*)BINARY_ID+11,4);
 	printf("Board s/n = %s\n", BINARY_ID);
-	while(!BUTTON_RST_ON);
+	while(!BUTTON_RST_ON) { Delay(10); }
 }
 
 void show_fw_version()
@@ -1919,5 +2110,126 @@ void show_fw_version()
 	display_BCD_numbers(ver,4);
 
 	printf("FW Version = %s\n", FW_VERSION);
-	while(!BUTTON_RST_ON);
+	while(!BUTTON_RST_ON) { Delay(10); }
+}
+
+/*
+void float_speed_test()
+{
+	float a = 12.3456789;
+	float b = 34.5678901;
+	float c = 0;
+
+	float t0 = micros();
+
+	for (int x=0;x<40;x++)
+	{
+		for (int i=0;i<1000000;i++)
+		{
+			for (int j=0;i<100000;i++)
+			{
+
+				c += a * b;
+				a*=0.56789f;
+				b*=0.54321f;
+
+				if(a<0.0000001 && a>-0.0000001)
+				{
+					a = c-b;
+				}
+				if(b<0.0000001 && b>-0.0000001)
+				{
+					b = c-a;
+				}
+
+				if(c>100000000 || c<-100000000)
+				{
+					c *= 0.00000000000000001;
+				}
+			}
+		}
+		printf("%f, 100T loops in %f\n", c, micros() - t0);
+		t0 = micros();
+	}
+}
+
+void double_speed_test()
+{
+	double a = 12.3456789;
+	double b = 34.5678901;
+	double c = 0;
+
+	double t0 = micros();
+
+	for (int x=0;x<40;x++)
+	{
+		for (int i=0;i<1000000;i++)
+		{
+			for (int j=0;i<100000;i++)
+			{
+
+				c += a * b;
+				a*=0.56789f;
+				b*=0.54321f;
+
+				if(a<0.0000001 && a>-0.0000001)
+				{
+					a = c-b;
+				}
+				if(b<0.0000001 && b>-0.0000001)
+				{
+					b = c-a;
+				}
+
+				if(c>100000000 || c<-100000000)
+				{
+					c *= 0.00000000000000001;
+				}
+			}
+		}
+		printf("%f, 100T loops in %f\n", c, micros() - t0);
+		t0 = micros();
+	}
+}
+*/
+
+int flashed_config_new_enough()
+{
+	int16_t FW_VERSION_NUM = fw_version_to_uint16(FW_VERSION+5); //format is: [Gv2/x.y.zzz]
+	printf("flashed_config_new_enough(): global_settings.CONFIG_FW_VERSION = %d, FW_VERSION_NUM = %d\n", global_settings.CONFIG_FW_VERSION, FW_VERSION_NUM);
+	if(global_settings.CONFIG_FW_VERSION < FW_VERSION_NUM)
+	{
+		return 0;
+	}
+	return 1;
+}
+
+uint16_t fw_version_to_uint16(char *str)
+{
+	char *cfg = malloc(40), *c_ptr;
+	int j=0;
+	for(int i=0;i<40;i++)
+	{
+		c_ptr = str+i;
+		//printf("fw_version_to_uint16(): i=%d,j=%d,c_ptr=%s\n", i, j, c_ptr);
+		if(c_ptr[0] >= '0' && c_ptr[0] <= '9')
+		{
+			cfg[j] = c_ptr[0];
+
+			if(++j==5)
+			{
+				//break;
+			}
+		}
+		else if(c_ptr[0]==0 || c_ptr[0]=='\n' || c_ptr[0]==']' || c_ptr[0]=='/')
+		{
+			break;
+		}
+	}
+	cfg[j] = 0;
+	//printf("fw_version_to_uint16(): cfg=%s\n", cfg);
+	uint16_t ret = atol(cfg);
+	//printf("ret=%d\n", ret);
+	free(cfg);
+	return ret;
 }

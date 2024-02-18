@@ -1,8 +1,18 @@
 /*
  * v1_freqs.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 27, 2016
- *      Author: mayo
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
  */
 
 #ifndef V1_FREQS_H_
@@ -42,24 +52,22 @@
 #endif
 
 #if FILTERS == 16
-	//int v1_freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 2200};//, 520}; //2640
 	#if ACCORD == 'MAJOR'
-		int v1_freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 110};//, 520}; //2640
+		int v1_freqs[] = {440, 660, 880, 550, 220, 1760, 1100, 110};
 	#elif ACCORD == 'MINOR'
-		int v1_freqs[] = {440, 660, 880, 520, 220, 1760, 1040, 110};//, 520}; //2640
+		int v1_freqs[] = {440, 660, 880, 520, 220, 1760, 1040, 110};
 	#endif
 #endif
 
 #if FILTERS == 14
-	int v1_freqs[] = {110, 220, 440, 520, 660, 880, 1040};//, 1760};//, 520};
+	int v1_freqs[] = {110, 220, 440, 520, 660, 880, 1040};
 #endif
 
 #if FILTERS == 12
 	#if ACCORD == 'MAJOR'
-		////int v1_freqs[FILTERS/2] = {440, 660, 880, 550, 220};//, 520};
 		int v1_freqs[] = {440, 550, 660, 880, 1100, 2200};
 	#elif ACCORD == 'MINOR'
-		int v1_freqs[] = {440, 660, 880, 520, 220, 1760};//, 1040};//, 520};
+		int v1_freqs[] = {440, 660, 880, 520, 220, 1760};
 	#endif
 #endif
 
@@ -67,7 +75,6 @@
 	#if ACCORD == 'MAJOR'
 		int v1_freqs[] = {440, 550, 660, 880, 1100};
 	#elif ACCORD == 'MINOR'
-		//int v1_freqs[] = {440, 660, 880, 520, 220};
 		int v1_freqs[] = {440, 660, 110, 520, 220};
 	#endif
 #endif
@@ -81,13 +88,11 @@
 #endif
 
 #if FILTERS == 4
-	//int v1_freqs[] = {440, 1760};
 	int v1_freqs[] = {440, 550};
 #endif
 
 #if FILTERS == 2
 	int v1_freqs[] = {440};
-	//int v1_freqs[] = {880};
 #endif
 
 #endif /* V1_FREQS_H_ */

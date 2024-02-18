@@ -1,11 +1,20 @@
 /*
- * DCO_synth.h
+ * v1_DCO_synth.h
  *
- *  Created on: 11 May 2017
- *      Author: mayo
+ *  Copyright 2024 Phonicbloom Ltd.
  *
- * Based on "The Tiny-TS Touch Synthesizer" by Janost 2016, Sweden
- * https://janostman.wordpress.com/the-tiny-ts-diy-touch-synthesizer/
+ *  Created on: May 11, 2017
+ *      Author: mario
+ *
+ *    Based on: "The Tiny-TS Touch Synthesizer" by Janost 2016, Sweden
+ *      Source: https://janostman.wordpress.com/the-tiny-ts-diy-touch-synthesizer/
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
  *
  */
 
@@ -21,24 +30,22 @@
 #ifndef v1_DCO_SYNTH_H_
 #define v1_DCO_SYNTH_H_
 
-//#include "CV_Gate.h"
-#include "MIDI.h"
-#include "MusicBox.h"
-#include <hw/codec.h>
-//#include <hw/controls.h>
-#include <hw/gpio.h>
-#include <hw/leds.h>
-#include <hw/sensors.h>
-#include <hw/signals.h>
-#include <notes.h>
 #include <stdbool.h>
 #include <string.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <math.h>
-//#include <stm32f4xx.h>
-//#include <stm32f4xx_spi.h>
-//#include <sys/_stdint.h>
+
+#include "MIDI.h"
+#include "MusicBox.h"
+#include "hw/codec.h"
+#include "hw/gpio.h"
+#include "hw/leds.h"
+#include "hw/sensors.h"
+#include "hw/signals.h"
+#include "hw/ui.h"
+#include "notes.h"
+
 
 //variables from other modules
 

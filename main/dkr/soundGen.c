@@ -496,12 +496,12 @@ void sequencer_newStep_action(void) // User callback function called by sequence
 	if ( (noteG.someNotesMuted) && (rintf(frand_a_b(0.4f , 1)) == 0) )
 	{
 		ADSR_keyOff(&adsr);
-		printf("sequencer_newStep_action(): ADSR_keyOff\n");
+		//printf("sequencer_newStep_action(): ADSR_keyOff\n");
 	}
 	else
 	{
 		ADSR_keyOn(&adsr);
-		printf("sequencer_newStep_action(): ADSR_keyOn\n");
+		//printf("sequencer_newStep_action(): ADSR_keyOn\n");
 	}
 
 	if (autoFilterON)
@@ -561,7 +561,7 @@ void sequencer_newSequence_action(void) // User callback function called by sequ
 }
 /*===============================================================================================================*/
 
-void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be used with the Sequencer
+IRAM_ATTR void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be used with the Sequencer
 {
 
 	//uint16_t 	pos;
@@ -604,6 +604,7 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 	//for (sampleCounter = 0; sampleCounter < SAMPLERATE; sampleCounter++)
 	sampleCounter = 0;
 	int dekrispator_patch_store_timeout = 0;
+	int patch_group = 0, patch_no;
 
 	printf("dekrispator_make_sound(): entering main loop\n");
 	while(!event_next_channel)
@@ -711,13 +712,17 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 		}
 */
 		#ifdef USE_FAUX_LOW_SAMPLE_RATE
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		//i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 		sd_write_sample(&sample32);
-		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		//i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 		#endif
-		i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		//i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+		i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 		sd_write_sample(&sample32);
-		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		//i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 
 		sampleCounter++;
 
@@ -900,11 +905,65 @@ void dekrispator_make_sound(void)///*uint16_t *buf , uint16_t length*/) // To be
 				store_dekrispator_patch_nvs(dkr_patch);
 			}
 		}
+		/*
 		if (TIMING_EVERY_20_MS == 33) //50Hz
 		{
 			if(limiter_coeff < DYNAMIC_LIMITER_COEFF_DEFAULT)
 			{
 				limiter_coeff += DYNAMIC_LIMITER_COEFF_DEFAULT / 20; //limiter will fully recover within 0.4 second
+			}
+		}
+		*/
+
+		if (TIMING_EVERY_100_MS == 199) //10Hz
+		{
+			if(midi_ctrl_cc>1 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[11])
+				{
+					patch_group = midi_ctrl_cc_values[11] / 20;
+					printf("patch_group => %d   \r", patch_group);
+					midi_ctrl_cc_updated[11] = 0;
+				}
+
+				if(midi_ctrl_cc_updated[10])
+				{
+					//snd = midi_ctrl_cc_values[10] / 20;
+					Sound_set(midi_ctrl_cc_values[10]);
+					printf("snd = %d\n", soundNumber_get());
+					midi_ctrl_cc_updated[10] = 0;
+				}
+
+				for(int i=0;i<10;i++)
+				{
+					if(midi_ctrl_cc_updated[i])
+					{
+						if(patch_group < 5)
+						{
+							patch_no = patch_group*10+i;
+							if(patch_no>=MP_PARAMS)
+							{
+								patch_no = MP_PARAMS-1;
+							}
+							dkr_patch->patch[patch_no] = midi_ctrl_cc_values[i];
+							printf("dkr_patch->patch[%d] => %d   \r", patch_no, dkr_patch->patch[patch_no]);
+							MagicPatch(MIDI_MAXi+2);
+						}
+						else
+						{
+							patch_no = (patch_group-5)*10+i;
+							if(patch_no>=MF_PARAMS)
+							{
+								patch_no = MF_PARAMS-1;
+							}
+							dkr_patch->fx[patch_no] = midi_ctrl_cc_values[i];
+							printf("dkr_patch->patch[%d] => %d   \r", patch_no, dkr_patch->patch[patch_no]);
+							MagicFX(MIDI_MAXi+2);
+						}
+						midi_ctrl_cc_updated[i] = 0;
+						//indicate_MIDI_controls(i);
+					}
+				}
 			}
 		}
 	}

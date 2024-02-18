@@ -29,7 +29,10 @@ float_t frand_a_b(float_t a, float_t b)
 	//return ( rand()/(float_t)RAND_MAX ) * (b-a) + a ;
 
 	//PseudoRNG1a_next_float() returns random float between -0.5f and +0.5f
-	return (PseudoRNG1a_next_float()+0.5f) * (b-a) + a ;
+	//return (PseudoRNG1a_next_float_new()+0.5f) * (b-a) + a ;
+	//new_random_value();
+	//return ((float_t)random_value/(float_t)UINT_MAX) * (b-a) + a;
+	return PseudoRNG1a_next_float_new01() * (b-a) + a ;
 }
 
 
@@ -46,7 +49,7 @@ float_t randomNum(void)
 	//return random;
 
 	//PseudoRNG1a_next_float() returns random float between -0.5f and +0.5f
-	return PseudoRNG1a_next_float()+0.5;
+	return PseudoRNG1a_next_float_new()+0.5;
 }
 
 /*-----------------------------------------------------------------------------*/

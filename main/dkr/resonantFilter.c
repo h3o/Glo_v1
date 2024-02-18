@@ -99,7 +99,7 @@ void SVF_setDrive(ResonantFilter* filter,uint8_t drive) /* drive in 0 ... 127 */
 
 }
 //------------------------------------------------------------------------------------
-void SVF_directSetFilterValue(ResonantFilter* filter, float val) // 0 < val < 1
+IRAM_ATTR void SVF_directSetFilterValue(ResonantFilter* filter, float val) // 0 < val < 1
 {
 	if (val > 0.95) val = 0.95f;
 	filter->f = val*0.5f;
@@ -158,7 +158,7 @@ void 	Filter2Type_set(uint8_t val)
 
 //------------------------------------------------------------------------------------
 
-float SVF_calcSample(ResonantFilter* filter, float in)
+IRAM_ATTR float SVF_calcSample(ResonantFilter* filter, float in)
 {
 	const float f 	= filter->g;
 	//fix unstable filter for high f and r settings

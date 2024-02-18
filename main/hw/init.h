@@ -1,49 +1,79 @@
 /*
  * init.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jan 23, 2018
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
 #ifndef INIT_H_
 #define INIT_H_
 
-//#include <stdint.h>
-
 #include "sdkconfig.h"
-#include "freertos/include/freertos/FreeRTOS.h"
-#include "freertos/include/freertos/task.h"
-#include "esp32/include/esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
 //#include "esp32/include/esp_event.h"
-#include "esp32/include/esp_attr.h"
-#include "esp32/include/esp_event_loop.h"
-#include "esp32/include/esp_task_wdt.h"
-#include "bootloader_support/include_priv/bootloader_random.h"
-#include "nvs_flash/include/nvs_flash.h"
-#include "driver/include/driver/gpio.h"
-#include "driver/include/driver/i2s.h"
-#include "driver/include/driver/mcpwm.h"
-#include "driver/include/driver/ledc.h"
-#include "driver/include/driver/i2c.h"
-#include "driver/include/driver/adc.h"
-#include "spi_flash/include/esp_spi_flash.h"
-#include "driver/include/driver/uart.h"
-#include "heap/include/esp_heap_caps_init.h"
-#include "driver/include/driver/dac.h"
-#include "esp32/include/rom/rtc.h"
+#include "esp_event_legacy.h"
+#include "esp_attr.h"
+#include "esp_sleep.h"
+//#include "esp_event/include/esp_event_loop.h"
+#include "esp_task_wdt.h"
+#include "bootloader_random.h"
+#include "nvs_flash.h"
+#include "driver/gpio.h"
+#include "driver/i2s.h"
+#include "driver/mcpwm.h"
+#include "driver/ledc.h"
+#include "driver/i2c.h"
+#include "driver/adc.h"
+#include "esp_spi_flash.h"
+#include "driver/uart.h"
+#include "esp_heap_caps_init.h"
+#include "driver/dac.h"
+#include "esp32/rom/rtc.h"
+#include "soc/io_mux_reg.h"
+#include "soc/gpio_periph.h"
+#include "freertos/FreeRTOSConfig.h"
 
 #include "board.h"
 
+#define CPU_CORE_BUTTONS_CONTROLS_TASK	1
+#define CPU_CORE_ACCELEROMETER_TASK		1
+#define CPU_CORE_EXPANDERS_TASK			1
+#define CPU_CORE_SENSORS_TASK			1
+#define CPU_CORE_RECEIVE_MIDI_TASK		1
+#define CPU_CORE_RECEIVE_SYNC_TASK		1
+#define CPU_CORE_TEMPO_DETECT_TASK		1
+#define CPU_CORE_SD_RECORDING_TASK		1
+#define CPU_CORE_SD_SECTOR_LOAD_TASK	1
+#define CPU_CORE_CHANNEL_DCO_TASK		0 //uses float
+#define CPU_CORE_BINAURAL_PROGRAM_TASK	0
+
+#define PRIORITY_BUTTONS_CONTROLS_TASK	10
+#define PRIORITY_ACCELEROMETER_TASK		10
+#define PRIORITY_EXPANDERS_TASK			10
+#define PRIORITY_SENSORS_TASK			10
+#define PRIORITY_RECEIVE_MIDI_TASK		9
+#define PRIORITY_RECEIVE_SYNC_TASK		9
+#define PRIORITY_TEMPO_DETECT_TASK		9
+#define PRIORITY_SD_RECORDING_TASK		8//12
+#define PRIORITY_SD_SECTOR_LOAD_TASK	8//12
+#define PRIORITY_CHANNEL_DCO_TASK		12//24
+#define PRIORITY_BINAURAL_PROGRAM_TASK	12
+
 #define I2S_NUM         ((i2s_port_t)I2S_NUM_0)
+
+extern size_t i2s_bytes_rw;
 
 #define MCLK_GPIO 1
 #define USE_APLL
@@ -51,33 +81,33 @@
 
 extern i2c_port_t i2c_num;
 
-#define I2C_MASTER_SCL_IO          GPIO_NUM_22	//gpio number for I2C master clock
-#define I2C_MASTER_SDA_IO          GPIO_NUM_21	//gpio number for I2C master data
-#define I2C_MASTER_NUM             I2C_NUM_1	//I2C port number for master dev
-#define I2C_MASTER_TX_BUF_DISABLE  0			//I2C master do not need buffer
-#define I2C_MASTER_RX_BUF_DISABLE  0			//I2C master do not need buffer
-//#define I2C_MASTER_FREQ_HZ         100000		//I2C master clock frequency
-#define I2C_MASTER_FREQ_HZ         400000		//I2C master clock frequency
+#define I2C_MASTER_SCL_IO				GPIO_NUM_22	//gpio number for I2C master clock
+#define I2C_MASTER_SDA_IO				GPIO_NUM_21	//gpio number for I2C master data
+#define I2C_MASTER_NUM					I2C_NUM_1	//I2C port number for master dev
+#define I2C_MASTER_TX_BUF_DISABLE		0			//I2C master do not need buffer
+#define I2C_MASTER_RX_BUF_DISABLE		0			//I2C master do not need buffer
+//#define I2C_MASTER_FREQ_HZ			100000		//I2C master clock frequency
+#define I2C_MASTER_FREQ_HZ				400000		//I2C master clock frequency
 
 //overdrive I2C: 700k works for codec too, 750k not...
-//#define I2C_MASTER_FREQ_HZ_FAST         650000	//I2C master clock frequency
-#define I2C_MASTER_FREQ_HZ_FAST         1000000		//I2C master clock frequency
+//#define I2C_MASTER_FREQ_HZ_FAST		650000		//I2C master clock frequency
+#define I2C_MASTER_FREQ_HZ_FAST			1000000		//I2C master clock frequency
 
-#define CODEC_I2C_ADDRESS                  0x18		//slave address for TLV320AIC3104
-//#define SPDIF_TX_I2C_ADDRESS               0x3a	//slave address for WM8804G
+#define CODEC_I2C_ADDRESS				0x18		//slave address for TLV320AIC3104
+//#define SPDIF_TX_I2C_ADDRESS			0x3a		//slave address for WM8804G
 
-#define ESP_SLAVE_ADDR                     0x28             //ESP32 slave address, you can set any 7bit value
-#define WRITE_BIT                          I2C_MASTER_WRITE //I2C master write
-#define READ_BIT                           I2C_MASTER_READ  //I2C master read
-#define ACK_CHECK_EN                       0x1              //I2C master will check ack from slave
-#define ACK_CHECK_DIS                      0x0              //I2C master will not check ack from slave
-#define ACK_VAL                            0x0              //I2C ack value
-#define NACK_VAL                           0x1              //I2C nack value
+#define ESP_SLAVE_ADDR					0x28             //ESP32 slave address, you can set any 7bit value
+#define WRITE_BIT						I2C_MASTER_WRITE //I2C master write
+#define READ_BIT						I2C_MASTER_READ  //I2C master read
+#define ACK_CHECK_EN					0x1              //I2C master will check ack from slave
+#define ACK_CHECK_DIS					0x0              //I2C master will not check ack from slave
+#define ACK_VAL							0x0              //I2C ack value
+#define NACK_VAL						0x1              //I2C nack value
 
 #define MIDI_UART UART_NUM_2
 
-#define TWDT_TIMEOUT_S						5
-#define TASK_RESET_PERIOD_S					4
+#define TWDT_TIMEOUT_S					5
+#define TASK_RESET_PERIOD_S				4
 
 extern const char* GLO_HASH;
 
@@ -85,9 +115,9 @@ extern int channel_loop,channel_loop_remapped;
 
 extern uint16_t ms10_counter, auto_power_off;
 
-#define AUTO_POWER_OFF_VOLUME_RAMP 60 //takes one minute to lower down the volume
+#define AUTO_POWER_OFF_VOLUME_RAMP		60 //takes one minute to lower down the volume
 
-extern uint8_t channel_running;
+extern int channel_running;
 extern uint8_t volume_ramp;
 extern uint8_t beeps_enabled;
 extern uint8_t sd_playback_channel;
@@ -98,6 +128,7 @@ extern uint32_t sample32;
 extern uint8_t glo_run;
 extern uint8_t channel_uses_codec;
 extern int init_free_mem;
+extern float t_start_channel;
 
 extern int sensor_active[4];
 extern float ir_res[];
@@ -118,11 +149,11 @@ extern float ir_res[];
 
 //old wiring, 1.75-1.77 without mod
 /*
-#define SYNC1_IO	GPIO_NUM_17 //GPIO_NUM_5
-#define SYNC2_IO	GPIO_NUM_27
+#define SYNC1_IO			GPIO_NUM_17 //GPIO_NUM_5
+#define SYNC2_IO			GPIO_NUM_27
 
-#define CV1_IN		GPIO_NUM_17 //GPIO_NUM_5
-#define CV2_IN		GPIO_NUM_27
+#define CV1_IN				GPIO_NUM_17 //GPIO_NUM_5
+#define CV2_IN				GPIO_NUM_27
 
 #define MIDI_OUT_PWR		GPIO_NUM_27 //pwr = opposite pin to transistor
 #define MIDI_OUT_SIGNAL		GPIO_NUM_16
@@ -131,13 +162,13 @@ extern float ir_res[];
 */
 
 //new wiring, 1.75 with mod, 1.78
-#define SYNC1_IO	GPIO_NUM_25 //17 //GPIO_NUM_5
-#define SYNC2_IO	GPIO_NUM_26 //27
+#define SYNC1_IO			GPIO_NUM_25
+#define SYNC2_IO			GPIO_NUM_26
 
-#define CV1_IN		GPIO_NUM_25 //17 //GPIO_NUM_5
-#define CV2_IN		GPIO_NUM_26 //27
+#define CV1_IN				GPIO_NUM_25
+#define CV2_IN				GPIO_NUM_26
 
-#define MIDI_OUT_PWR		GPIO_NUM_26 //27 //pwr = opposite pin to transistor
+#define MIDI_OUT_PWR		GPIO_NUM_26
 #define MIDI_OUT_SIGNAL		GPIO_NUM_16
 
 #define MIDI_IN_SIGNAL		GPIO_NUM_18
@@ -197,7 +228,6 @@ uint16_t hardware_check();
 void clear_unallocated_memory();
 
 //void spdif_transceiver_init();
-void generate_random_seed();
 
 unsigned char byte_bit_reverse(unsigned char b);
 
@@ -214,9 +244,6 @@ void gecho_test_MIDI_output();
 
 void gecho_LED_expander_init();
 void gecho_LED_expander_test();
-
-void rotary_encoder_init();
-void rotary_encoder_test();
 
 void sync_out_init();
 void sync_out_test();
@@ -239,6 +266,12 @@ void set_mic_bias(int bias);
 
 void show_board_serial_no();
 void show_fw_version();
+
+//void float_speed_test();
+//void double_speed_test();
+
+int flashed_config_new_enough();
+uint16_t fw_version_to_uint16(char *str);
 
 #ifdef __cplusplus
 }

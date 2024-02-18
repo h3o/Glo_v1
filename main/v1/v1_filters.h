@@ -1,17 +1,25 @@
 /*
- * filters.h
+ * v1_filters.cpp
+ *
+ *  Copyright 2024 Phonicbloom Ltd.
  *
  *  Created on: Apr 27, 2016
- *      Author: mayo
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
  */
 
 #ifndef V1_FILTERS_H_
 #define V1_FILTERS_H_
 
-//#include "bilinear.h"
 #include "v1_FilterIIR00.h"
 #include "v1_FilterSimpleIIR02.h"
-//#include "codec.h"
 #include "v1_Chord.h"
 
 #define USE_FILTERS
@@ -35,22 +43,15 @@
 
 //#define CHORD 'NONE'
 //#define FILTERS 6
-//#define FORMANTS 'F_EE'
-//#define FORMANTS 'F_OO'
-//#define FORMANTS 'F_I'
-//#define FORMANTS 'F_E'
-//#define FORMANTS 'F_U'
-//#define FORMANTS 'F_A'
 
 #define CHORD_MAX_VOICES 8	//gives 16 channels total
 #define FILTERS_TO_USE 2 //0 or 1 or 2 - which filter algorithm (0 for none)
 #define FILTERS_FREQ_CORRECTION 1.035
 #define ENABLE_MIXING_DELTAS 0
+#define DEFAULT_ARPEGGIATOR_FILTER_PAIR 7 //the last one, numbered from 0
 
 typedef struct {
 
-	//int reso;
-	//float gain;
 	float volume_coef,volume_f,vol_ramp,reso2,feedback2;
 	bool enable_mixing_deltas;
 	float mixing_volumes[FILTERS];
@@ -63,6 +64,8 @@ typedef struct {
 	float reso2lim[2];
 	float feedback2lim[2];
 
+	int arpeggiator_filter_pair;
+
 } v1_FILTERS_PARAMS;
 
 class v1_filters
@@ -70,12 +73,8 @@ class v1_filters
 	public:
 
 		v1_FILTER *iir;
-		//FilterIIR00 *filter[FILTERS];
-
 		v1_FilterSimpleIIR02 *iir2;
-
 		v1_FILTERS_PARAMS fp;
-
 		v1_Chord *chord;
 
 		v1_filters(void);
@@ -87,6 +86,7 @@ class v1_filters
 		void start_update_filters(int f1, int f2, int f3, int f4, float freq1, float freq2, float freq3, float freq4);
 		void start_next_chord();
 		void progress_update_filters(v1_filters *fil, bool reset_buffers);
+		void add_to_update_filters_pairs(int filter_n, float freq);
 
 	private:
 		int update_filters_f[CHORD_MAX_VOICES*2];

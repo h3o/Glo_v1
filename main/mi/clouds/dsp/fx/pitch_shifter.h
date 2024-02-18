@@ -51,14 +51,14 @@ class PitchShifter {
     engine_.Clear();
   }
 
-  inline void Process(FloatFrame* input_output, size_t size) {
+  IRAM_ATTR inline void Process(FloatFrame* input_output, size_t size) {
     while (size--) {
       Process(input_output);
       ++input_output;
     }
   }
   
-  void Process(FloatFrame* input_output) {
+  IRAM_ATTR void Process(FloatFrame* input_output) {
     typedef E::Reserve<2047, E::Reserve<2047> > Memory;
     E::DelayLine<Memory, 0> left;
     E::DelayLine<Memory, 1> right;

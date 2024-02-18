@@ -1,71 +1,42 @@
 /*
  * FilterFlanger.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: 10 Nov 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <FilterFlanger.h>
-#include <InitChannels.h>
-#include <Interface.h>
-#include <hw/init.h>
-#include <hw/ui.h>
-#include <hw/gpio.h>
-#include <hw/leds.h>
-#include <hw/sdcard.h>
 #include <string.h>
 
-/*
-#define LOOPER_ECHO
+#include "FilterFlanger.h"
+#include "InitChannels.h"
+#include "Interface.h"
+#include "hw/init.h"
+#include "hw/ui.h"
+#include "hw/gpio.h"
+#include "hw/leds.h"
+#include "hw/sdcard.h"
 
-#define LOOPER_STATUS_STOPPED		0
-#define LOOPER_STATUS_RECORD_START	1
-#define LOOPER_STATUS_RECORDING		2
-#define LOOPER_STATUS_RECORD_STOP	3
-#define LOOPER_STATUS_PLAY_START	4
-#define LOOPER_STATUS_PLAYING		5
-#define LOOPER_STATUS_PLAY_STOP		6
-
-#define LOOPER_TRACKS				4
-
-#define LOOPER_BUFFER_SIZE			1024
-#define BUFFER_SIZE_IN_BYTES		(LOOPER_BUFFER_SIZE*sizeof(uint32_t))
-
-#define SAMPLER_BUTTONS_SHORT_THRESHOLD 	1		//wait 20ms till counting as short press
-#define SAMPLER_BUTTONS_LONG_THRESHOLD 		20		//wait 400ms till counting as long press
-*/
-
-void channel_filter_flanger()
+IRAM_ATTR void channel_filter_flanger()
 {
 	#define MIN_V 32000		//initial minimum value, should be higher than any possible value
 	#define MAX_V -32000	//initial maximum value, should be lower than any possible value
 
-	int16_t min_lr, min_rr, max_lr, max_rr; //raw
-	float min_lf, min_rf, max_lf, max_rf; //converted
-	int32_t min_l, min_r, max_l, max_r; //final
-
-	//LEDs_all_OFF();
-	//init_echo_buffer();
-	//program_settings_reset();
-	channel_init(0, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0); //init without any features
+	channel_init(0, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0, 0, 0); //init without any features
 
 	TEMPO_BY_SAMPLE = get_tempo_by_BPM(tempo_bpm);
 	DELAY_BY_TEMPO = get_delay_by_BPM(tempo_bpm);
 
-	//this sounds great:
-	//ECHO_MIXING_GAIN_MUL = 19; //amount of signal to feed back to echo loop, expressed as a fragment
-    //ECHO_MIXING_GAIN_DIV = 20; //e.g. if MUL=2 and DIV=3, it means 2/3 of signal is mixed in
-
-	ECHO_MIXING_GAIN_MUL = 38; //amount of signal to feed back to echo loop, expressed as a fragment
+	ECHO_MIXING_GAIN_MUL = 38; //amount of signal to feed back to echo loop, expressed as a fraction
     ECHO_MIXING_GAIN_DIV = 40; //e.g. if MUL=2 and DIV=3, it means 2/3 of signal is mixed in
 
 	#define ECHO_MIXING_GAIN_MUL_MIN	32
@@ -80,7 +51,7 @@ void channel_filter_flanger()
 	memset(flanger_line,0,FLANGER_RANGE*sizeof(uint32_t));
 
 	//float speedup=1.0f, slowdown=1.0f;
-	float rnd=0.0f;
+	//float rnd;
 	int ff_oversample = 2;
 
 	LED_R8_all_OFF();
@@ -113,9 +84,6 @@ void channel_filter_flanger()
 	{
 		if (!(sampleCounter & 0x00000001)) //right channel
 		{
-			rnd = PseudoRNG1a_next_float();
-			//memcpy(&random_value, &r, sizeof(random_value));
-
 			sample_f[0] = (float)((int16_t)(ADC_sample >> 16)) * OpAmp_ADC12_signal_conversion_factor;
 		}
 
@@ -212,20 +180,20 @@ void channel_filter_flanger()
 			{
 				/*if(speedup==1.0f)
 				{*/
-					/*n_bytes = */i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+					i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 					sd_write_sample(&sample32);
 					//}
 					//for(int i=0;i<ch344_oversample;i++)
 					//{
-					/*ADC_result = */i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+					i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 				/*}
 				else if(speedup>1.99f)
 				{
 					if(warp_cnt%2)
 					{
-						i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+						i2s_write(I2S_NUM, (void*)&sample32, 4, &bytes_written, portMAX_DELAY);
 						sd_write_sample(&sample32);
-						i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+						i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 					}
 				}
 				else
@@ -235,9 +203,9 @@ void channel_filter_flanger()
 					if(rnd < 1.0f/speedup-0.5f)
 					{
 						//printf("<%.02f\n",1.0f/speedup-0.5f);
-						i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+						i2s_write(I2S_NUM, (void*)&sample32, 4, &bytes_written, portMAX_DELAY);
 						sd_write_sample(&sample32);
-						i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+						i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 					}
 					//else
 					//{
@@ -250,9 +218,9 @@ void channel_filter_flanger()
 					//if(rnd > 1.0f/slowdown-0.5f) //--> upper end level OK
 					if(rnd > 2.0f/slowdown-1.5f)
 					{
-						i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+						i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 						sd_write_sample(&sample32);
-						i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+						i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
 					}
 				}*/
 			}
@@ -521,4 +489,3 @@ void channel_filter_flanger()
 
 	free(flanger_line);
 }
-

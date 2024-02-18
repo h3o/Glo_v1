@@ -1,41 +1,44 @@
 /*
  * FilteredChannels.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Nov 26, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <FilteredChannels.h>
-#include <InitChannels.h>
-#include <Accelerometer.h>
-#include <Sensors.h>
-#include <Interface.h>
-#include <Binaural.h>
-#include <hw/init.h>
-#include <hw/signals.h>
-#include <hw/sdcard.h>
-#include <hw/leds.h>
-#include <hw/ui.h>
-#include <hw/midi.h>
+#include "FilteredChannels.h"
+#include "InitChannels.h"
+#include "Accelerometer.h"
+#include "Sensors.h"
+#include "Interface.h"
+#include "Binaural.h"
+#include "hw/init.h"
+#include "hw/signals.h"
+#include "hw/sdcard.h"
+#include "hw/leds.h"
+#include "hw/ui.h"
+#include "hw/midi.h"
 
 //#define USE_AUTOCORRELATION
 #define DRY_MIX_AFTER_ECHO
 //#define LIMITER_DEBUG
 
-static volatile double r_noise = NOISE_SEED;
-static volatile int i_noise;
+double r_noise = NOISE_SEED;
+int i_noise;
 
 #define NOISE_BOOST_BY_MIDI_MAX		4.0f
 #define SAMPLE_VOLUME_BY_MIDI_MAX	4.0f
+
+float mixed_sample_volume_coef_ext;
 
 int wind_voices;
 
@@ -43,13 +46,14 @@ int wind_voices;
 int limiter_debug[8] = {32760, -32760, 32760, -32760, 32760, -32760, 32760, -32760};
 #endif
 
-void filtered_channel(int use_bg_sample, int use_direct_waves_filters, int use_reverb, float mixed_sample_volume_coef, int controls_type)
+IRAM_ATTR void filtered_channel(int use_bg_sample, int use_direct_waves_filters, int use_reverb, float mixed_sample_volume_coef, int controls_type)
 {
 	printf("filtered_channel(): wind_voices = %d\n",wind_voices);
 	#ifdef BOARD_GECHO
 
 	float reverb_volume = 1.0f;
 	int wind_cutoff_sweep = 0;
+	mixed_sample_volume_coef_ext = mixed_sample_volume_coef;
 
 	#define DIRECT_WAVES_RANGES			8
 	#define DIRECT_WAVES_RANGE_DEFAULT	3
@@ -136,7 +140,7 @@ void filtered_channel(int use_bg_sample, int use_direct_waves_filters, int use_r
 	#endif
 }
 
-void filtered_channel_add_echo()
+IRAM_ATTR void filtered_channel_add_echo()
 {
 	if(!echo_dynamic_loop_length)
 	{
@@ -179,7 +183,7 @@ void filtered_channel_add_echo()
 	echo_buffer[echo_buffer_ptr0] = sample_i16;
 }
 
-void filtered_channel_adjust_reverb()
+IRAM_ATTR void filtered_channel_adjust_reverb()
 {
 	bit_crusher_reverb+=3;
 
@@ -189,4 +193,21 @@ void filtered_channel_adjust_reverb()
 	}
 
 	reverb_dynamic_loop_length = bit_crusher_reverb;
+}
+
+void filters_speed_test()
+{
+	channel_init(0, 41, 0, FILTERS_TYPE_LOW_PASS, FILTERS_RESONANCE_DEFAULT, 1, 0, ACTIVE_FILTER_PAIRS_ALL, 0, 1);
+	printf("filtered_channel(): wind_voices = %d\n",wind_voices);
+	float reverb_volume = 1.0f;
+	int wind_cutoff_sweep = 0;
+	#define DIRECT_WAVES_RANGES			8
+	#define DIRECT_WAVES_RANGE_DEFAULT	3
+	uint16_t direct_waves_ranges[DIRECT_WAVES_RANGES] = {100,200,300,400,600,800,1200,1600};
+	uint16_t direct_waves_range = direct_waves_ranges[DIRECT_WAVES_RANGE_DEFAULT]; //1000;
+	int direct_waves_range_ptr = DIRECT_WAVES_RANGE_DEFAULT;
+	uint8_t reso[2] = {0,0}; //for detecting if resonance has changed and needs to be updated
+	int midi_override = 0;
+	int lock_sensors = 0;
+	#include "filtered_channel_loop_speed_test.inc"
 }

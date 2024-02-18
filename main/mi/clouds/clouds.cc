@@ -22,7 +22,7 @@
 // 
 // See http://creativecommons.org/licenses/MIT/ for more information.
 
-// Modified by mario for the purpose of integrating into Glo & Gecho Loopsynth
+// code ported from STM32 to ESP32 by mario for the purpose of integrating into Glo & Gecho Loopsynth
 
 #include "clouds.h"
 
@@ -38,14 +38,14 @@
 #include "clouds/settings.h"
 #include "clouds/ui.h"
 
-#include "../hw/init.h"
-#include "../hw/codec.h"
-#include "../hw/signals.h"
-#include "../hw/gpio.h"
-#include "../hw/ui.h"
-#include "../hw/sdcard.h"
-#include "../hw/leds.h"
-#include "../hw/midi.h"
+#include "hw/init.h"
+#include "hw/codec.h"
+#include "hw/signals.h"
+#include "hw/gpio.h"
+#include "hw/ui.h"
+#include "hw/sdcard.h"
+#include "hw/leds.h"
+#include "hw/midi.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -55,9 +55,37 @@
 //#define DYNAMIC_BUFFERS //depends on ECHO_BUFFER_STATIC in signals.h
 #define LOAD_CLOUDS_PATCH
 
-#define CLOUDS_MIDI_PITCH_BASE	60		//note c4 will be pitch 0
-#define CLOUDS_MIDI_REVERB_MAX	5.0f	//max value for reverb by continuous controller wheel
-#define CLOUDS_MIDI_TEXTURE_MAX	5.0f	//max value for texture by pitch-bend wheel
+#define CLOUDS_MIDI_PITCH_BASE			60		//note c4 will be pitch 0
+#define CLOUDS_MIDI_PITCH_MAX			48.0f	//two octaves up or down
+//#define CLOUDS_MIDI_PITCH_MAX			72.0f
+
+float CLOUDS_MIDI_REVERB_MAX;
+#define CLOUDS_MIDI_REVERB_MAX1			2.0f	//1.1f //max value for reverb by continuous controller wheel, good for GRANULAR mode
+#define CLOUDS_MIDI_REVERB_MAX2			8.0f	//good for STRETCH and LOOPING_DELAY modes
+
+float CLOUDS_MIDI_TEXTURE_MAX;
+#define CLOUDS_MIDI_TEXTURE_MAX1		12.0f	//max value for texture by pitch-bend wheel, good for GRANULAR mode
+#define CLOUDS_MIDI_TEXTURE_MAX2		1.0f	//good for STRETCH and LOOPING_DELAY modes
+
+float CLOUDS_MIDI_DENSITY_MAX;
+#define CLOUDS_MIDI_DENSITY_MAX1		1.0f//0.99f	//good for GRANULAR mode
+#define CLOUDS_MIDI_DENSITY_MAX2		12.0f	//good for STRETCH and LOOPING_DELAY modes
+
+#define CLOUDS_MIDI_POSITION_MAX		1.0f//1.5f
+#define CLOUDS_MIDI_SIZE_MAX			1.0f
+#define CLOUDS_MIDI_FEEDBACK_MAX		0.99f
+#define CLOUDS_MIDI_STEREO_SPREAD_MAX	12.0f
+#define CLOUDS_MIDI_DRY_WET_MAX			1.0f
+#define CLOUDS_MIDI_POST_GAIN_MAX		2.0f
+
+//#define GATE_TRIGGER_CONTROLS
+
+/*
+#define CLOUDS_MIDI_SPECTRAL_PHASE_RAND_MAX		6.0f
+#define CLOUDS_MIDI_SPECTRAL_QUANTIZATION_MAX	6.0f
+#define CLOUDS_MIDI_SPECTRAL_REFRESH_MAX		6.0f
+#define CLOUDS_MIDI_SPECTRAL_WARP_MAX			6.0f
+*/
 
 using namespace clouds;
 //using namespace stmlib;
@@ -257,11 +285,6 @@ void change_parameter(Parameters* p, int param, float val, const char *param_nam
 		if(val!=0)p->feedback += val;
 		printf("%f", p->feedback);
 	}
-	/*(else if(param==8)
-	{
-		if(val!=0)p->dry_wet += val;
-		printf("%f", p->dry_wet);
-	}*/
 	else if(param==6)
 	{
 		if(val!=0)p->reverb += val;
@@ -271,6 +294,17 @@ void change_parameter(Parameters* p, int param, float val, const char *param_nam
 	{
 		if(val!=0)p->stereo_spread += 10*val;
 		printf("%f", p->stereo_spread);
+		p->granular.stereo_spread = p->stereo_spread;
+	}
+	else if(param==8)
+	{
+		if(val!=0)p->dry_wet += val;
+		printf("%f", p->dry_wet);
+	}
+	else if(param==9)
+	{
+		if(val!=0)p->post_gain += val;
+		printf("%f", p->post_gain);
 	}
 	printf("\n");
 }
@@ -299,16 +333,32 @@ void print_params(Parameters* p, int print_names)
 			p->pitch,
 			p->density,
 			p->texture,
-			p->feedback,
 			p->dry_wet,
-			p->reverb,
 			p->stereo_spread,
+			p->feedback,
+			p->reverb,
 			p->post_gain);
 	}
 }
 
-void clouds_main(int change_sampling_rate) {
-	printf("clouds_main()\n");
+int last_midi_control_indication = -1;
+int midi_control_indication_timeout = -1;
+#define MIDI_CONTROL_INDICATION_TIMEOUT		300
+
+void indicate_MIDI_controls(int midi_control)
+{
+	LED_B5_set_byte(midi_ctrl_cc_values[midi_control]>>2);
+	if(last_midi_control_indication != midi_control)
+	{
+		LED_R8_all_OFF();
+		LED_O4_all_OFF();
+		if(midi_control<8) LED_R8_set(midi_control, 1); else LED_O4_set(midi_control-8, 1);
+		midi_control_indication_timeout = MIDI_CONTROL_INDICATION_TIMEOUT;
+	}
+}
+
+IRAM_ATTR void clouds_main(int change_sampling_rate, int playback_mode) {
+	printf("clouds_main(): cloudsInit()\n");
 	cloudsInit();
 	//printf("ui.DoEvents()\n");
   //while (1) {
@@ -321,10 +371,10 @@ void clouds_main(int change_sampling_rate) {
 	BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
 	#endif
 
-	#define n 32 //good with 44.1k rate
-	//#define n 24 //not good with 32k rate
-    uint16_t input[n*2];
-    uint16_t output[n*2];
+	#define IO_BUFFER_SIZE 32 //size in stereo samples (32bit), good with 44.1k or 50.78k rate
+	//#define IO_BUFFER_SIZE 24 //size in stereo samples (32bit), not good with 32k rate
+    uint16_t input[IO_BUFFER_SIZE*2];
+    uint16_t output[IO_BUFFER_SIZE*2];
     int ptr = 0;
     char *out_ptr;
 
@@ -344,10 +394,25 @@ void clouds_main(int change_sampling_rate) {
 #ifdef DYNAMIC_OBJECTS
 	processor->set_num_channels(2);
 	processor->set_low_fidelity(false);
-	processor->set_playback_mode(PLAYBACK_MODE_GRANULAR);
+	//processor->set_playback_mode(PLAYBACK_MODE_GRANULAR);
 	//processor->set_playback_mode(PLAYBACK_MODE_SPECTRAL);
 	//processor->set_playback_mode(PLAYBACK_MODE_STRETCH);
 	//processor->set_playback_mode(PLAYBACK_MODE_LOOPING_DELAY);
+	printf("clouds_main(): processor->set_playback_mode(%d)\n", playback_mode);
+	processor->set_playback_mode((clouds::PlaybackMode)playback_mode);
+
+	if(playback_mode)
+	{
+		CLOUDS_MIDI_TEXTURE_MAX = CLOUDS_MIDI_TEXTURE_MAX2;
+		CLOUDS_MIDI_DENSITY_MAX = CLOUDS_MIDI_DENSITY_MAX2;
+		CLOUDS_MIDI_REVERB_MAX = CLOUDS_MIDI_REVERB_MAX2;
+	}
+	else
+	{
+		CLOUDS_MIDI_TEXTURE_MAX = CLOUDS_MIDI_TEXTURE_MAX1;
+		CLOUDS_MIDI_DENSITY_MAX = CLOUDS_MIDI_DENSITY_MAX1;
+		CLOUDS_MIDI_REVERB_MAX = CLOUDS_MIDI_REVERB_MAX1;
+	}
 
 	Parameters* p = processor->mutable_parameters();
 #else
@@ -371,7 +436,7 @@ void clouds_main(int change_sampling_rate) {
 	//processor->set_bypass(true);
 
 	//#define PARAMS_N 11
-	#define PARAMS_N 8
+	#define PARAMS_N 10//8
 
 	int params_ptr = PARAMS_N-1;
 	const char *param_names[PARAMS_N] = {
@@ -385,9 +450,12 @@ void clouds_main(int change_sampling_rate) {
 			"feedback",
 			//"dry_wet",
 			"reverb",
-			"stereo_spread"};
+			"stereo_spread",
+			"dry_wet",
+			"post_gain"
+	};
 
-	//p->gate = false;
+	p->gate = false;
 	p->trigger = false;
 	p->freeze = false;
 
@@ -419,6 +487,7 @@ void clouds_main(int change_sampling_rate) {
 	p->feedback = 0.3f;
 	p->reverb = 2.4;
 	p->stereo_spread = 5.9f;
+	p->granular.stereo_spread = p->stereo_spread;
 
 	p->dry_wet = 1;
 	p->post_gain = 1.2f;
@@ -428,7 +497,9 @@ void clouds_main(int change_sampling_rate) {
 
 	//i2s_zero_dma_buffer(I2S_NUM);
 	int scroll_params = 0;
+	#ifdef BOARD_WHALE
 	int direct_update_params = 0;
+	#endif
 	int selected_patch = 0;
 
 	#ifdef BOARD_WHALE
@@ -440,7 +511,12 @@ void clouds_main(int change_sampling_rate) {
 	//float *float_p = (float*)((void *)p);
 
 	#ifdef LOAD_CLOUDS_PATCH
-	int clouds_patches = load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS);
+
+	const char* patch_block_names[] = {"[clouds_patches_granular]", "[clouds_patches_stretch]", "[clouds_patches_looping_delay]", "[clouds_patches_spectral]"};
+
+	int clouds_patches = load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS, patch_block_names[playback_mode]);
+	p->granular.stereo_spread = p->stereo_spread;
+
 	printf("Clouds patches found: %d\n", clouds_patches);
 	#else
 	int clouds_patches = 0;
@@ -457,11 +533,14 @@ void clouds_main(int change_sampling_rate) {
 
 	//clouds always uses sensors only
 	sensors_active = 1;
+	SENSORS_LEDS_indication_enabled = 0;
+	LEDs_all_OFF();
+
 	accelerometer_active = 0;
 
-	int s3_trigger = 0;
+	int s1_trigger = 0, s2_trigger = 0, s3_trigger = 0;
 
-	float rnd;
+	//float rnd;
 	#ifdef BOARD_WHALE
 	while(!event_next_channel || direct_update_params || p->freeze)
 	#else
@@ -473,30 +552,176 @@ void clouds_main(int change_sampling_rate) {
 		if(MIDI_notes_updated)
 		{
 			MIDI_notes_updated = 0;
-			LED_B5_all_OFF();
+			//printf("clouds_main(): MIDI_last_chord[0] = %d, MIDI_keys_pressed = %d\n", MIDI_last_chord[0], MIDI_keys_pressed);
+
+			if(!MIDI_keys_pressed)
+			{
+				if(p->freeze)
+				{
+					LED_B5_set_byte(0xff);
+				}
+			}
+			else
+			{
+				LED_B5_all_OFF();
+			}
+
 			LED_W8_all_OFF();
 			MIDI_to_LED(MIDI_last_chord[0], 1);
 			p->pitch = MIDI_last_chord[0] - CLOUDS_MIDI_PITCH_BASE;
 		}
 
-		//printf("MIDI_controllers_updated = %d, MIDI_controllers_active_PB = %d, MIDI_controllers_active_CC = %d\n", MIDI_controllers_updated, MIDI_controllers_active_PB, MIDI_controllers_active_CC);
-
-		if(MIDI_controllers_active_CC)
+		if(midi_control_indication_timeout>=0)
 		{
-			if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_CC_UPDATED)
+			midi_control_indication_timeout--;
+			if(midi_control_indication_timeout==0)
 			{
-				p->texture = ((float)MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]/127.0f) * CLOUDS_MIDI_TEXTURE_MAX;
-				//printf("MIDI_WHEEL_CONTROLLER_CC => %d, texture = %f\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC], p->texture);
-				MIDI_controllers_updated = 0;
+				LED_R8_all_OFF();
+				LED_O4_all_OFF();
 			}
 		}
-		if(MIDI_controllers_active_PB)
+
+		//printf("MIDI_controllers_updated = %d, MIDI_controllers_active_PB = %d, MIDI_controllers_active_CC = %d\n", MIDI_controllers_updated, MIDI_controllers_active_PB, MIDI_controllers_active_CC);
+
+		if(midi_ctrl_cc>1 && midi_ctrl_cc_active)
 		{
-			if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_PB_UPDATED)
+			#if 0 //test for SPECTRAL mode params
+			if(midi_ctrl_cc_updated[0])
 			{
-				p->reverb = ((float)MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB]/127.0f) * CLOUDS_MIDI_REVERB_MAX;
-				//printf("MIDI_WHEEL_CONTROLLER_PB => %d, reverb = %f\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB], p->reverb);
-				MIDI_controllers_updated = 0;
+				p->spectral.phase_randomization = ((float)midi_ctrl_cc_values[0]/127.0f) * CLOUDS_MIDI_SPECTRAL_PHASE_RAND_MAX;
+				printf("p->spectral.phase_randomization => %f\r", p->spectral.phase_randomization);
+				midi_ctrl_cc_updated[0] = 0;
+				indicate_MIDI_controls(0);
+			}
+			if(midi_ctrl_cc_updated[1])
+			{
+				p->spectral.quantization = ((float)midi_ctrl_cc_values[1]/127.0f) * CLOUDS_MIDI_SPECTRAL_QUANTIZATION_MAX;
+				printf("p->spectral.quantization => %f\r", p->spectral.quantization);
+				midi_ctrl_cc_updated[1] = 0;
+				indicate_MIDI_controls(1);
+			}
+			if(midi_ctrl_cc_updated[2])
+			{
+				p->spectral.refresh_rate = ((float)midi_ctrl_cc_values[2]/127.0f) * CLOUDS_MIDI_SPECTRAL_REFRESH_MAX;
+				printf("p->spectral.refresh_rate => %f\r", p->spectral.refresh_rate);
+				midi_ctrl_cc_updated[2] = 0;
+				indicate_MIDI_controls(2);
+			}
+			if(midi_ctrl_cc_updated[3])
+			{
+				p->spectral.warp = (((float)midi_ctrl_cc_values[3]-64.0f)/127.0f) * CLOUDS_MIDI_SPECTRAL_WARP_MAX;
+				printf("p->spectral.warp => %f\r", p->spectral.warp);
+				midi_ctrl_cc_updated[3] = 0;
+				indicate_MIDI_controls(3);
+			}
+			#endif
+
+			//parameters order in the structure: position, size, pitch, density, texture, dry_wet, stereo_spread, feedback, reverb, post_gain
+
+			//parameters orter by controllers: texture, reverb,	density, pitch, position, size, feedback, stereo_spread, dry_wet, post_gain
+
+			#if 1
+			if(midi_ctrl_cc_updated[0])
+			{
+				p->texture = ((float)midi_ctrl_cc_values[0]/127.0f) * CLOUDS_MIDI_TEXTURE_MAX;
+				printf("p->texture => %f\r", p->texture);
+				midi_ctrl_cc_updated[0] = 0;
+				indicate_MIDI_controls(0);
+			}
+			if(midi_ctrl_cc_updated[1])
+			{
+				p->reverb = ((float)midi_ctrl_cc_values[1]/127.0f) * CLOUDS_MIDI_REVERB_MAX;
+				printf("p->reverb => %f\r", p->reverb);
+				midi_ctrl_cc_updated[1] = 0;
+				indicate_MIDI_controls(1);
+			}
+			if(midi_ctrl_cc_updated[2])
+			{
+				p->density = ((float)midi_ctrl_cc_values[2]/127.0f) * CLOUDS_MIDI_DENSITY_MAX;
+				printf("p->density => %f\r", p->density);
+				midi_ctrl_cc_updated[2] = 0;
+				indicate_MIDI_controls(2);
+			}
+			if(midi_ctrl_cc_updated[3])
+			{
+				p->pitch = (((float)midi_ctrl_cc_values[3]-64.0f)/127.0f) * CLOUDS_MIDI_PITCH_MAX;
+				printf("p->pitch => %f\r", p->pitch);
+				midi_ctrl_cc_updated[3] = 0;
+				indicate_MIDI_controls(3);
+			}
+			#endif
+
+			if(midi_ctrl_cc_updated[4])
+			{
+				p->position = ((float)midi_ctrl_cc_values[4]/127.0f) * CLOUDS_MIDI_POSITION_MAX;
+				printf("p->position => %f\r", p->position);
+				midi_ctrl_cc_updated[4] = 0;
+				indicate_MIDI_controls(4);
+			}
+			if(midi_ctrl_cc_updated[5])
+			{
+				p->size = ((float)midi_ctrl_cc_values[5]/127.0f) * CLOUDS_MIDI_SIZE_MAX;
+				printf("p->size => %f\r", p->size);
+				midi_ctrl_cc_updated[5] = 0;
+				indicate_MIDI_controls(5);
+			}
+			if(midi_ctrl_cc_updated[6])
+			{
+				p->feedback = ((float)midi_ctrl_cc_values[6]/127.0f) * CLOUDS_MIDI_FEEDBACK_MAX;
+				printf("p->feedback => %f\r", p->feedback);
+				midi_ctrl_cc_updated[6] = 0;
+				indicate_MIDI_controls(6);
+			}
+			if(midi_ctrl_cc_updated[7])
+			{
+				p->stereo_spread = ((float)midi_ctrl_cc_values[7]/127.0f) * CLOUDS_MIDI_STEREO_SPREAD_MAX;
+				p->granular.stereo_spread = p->stereo_spread;
+				printf("p->stereo_spread => %f\r", p->stereo_spread);
+				midi_ctrl_cc_updated[7] = 0;
+				indicate_MIDI_controls(7);
+			}
+			if(midi_ctrl_cc_updated[8])
+			{
+				p->dry_wet = ((float)midi_ctrl_cc_values[8]/127.0f) * CLOUDS_MIDI_DRY_WET_MAX;
+				printf("p->dry_wet => %f\r", p->dry_wet);
+				midi_ctrl_cc_updated[8] = 0;
+				indicate_MIDI_controls(8);
+			}
+			if(midi_ctrl_cc_updated[9])
+			{
+				p->post_gain = ((float)midi_ctrl_cc_values[9]/127.0f) * CLOUDS_MIDI_POST_GAIN_MAX;
+				printf("p->post_gain => %f\r", p->post_gain);
+				midi_ctrl_cc_updated[9] = 0;
+				indicate_MIDI_controls(9);
+			}
+		}
+		else
+		{
+			if(MIDI_controllers_active_CC)
+			{
+				if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_CC_UPDATED)
+				{
+					if(playback_mode)
+					{
+						p->density = ((float)MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]/127.0f) * CLOUDS_MIDI_DENSITY_MAX;
+						printf("MIDI_WHEEL_CONTROLLER_CC => %d, density = %f\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC], p->density);
+					}
+					else
+					{
+						p->reverb = ((float)MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]/127.0f) * CLOUDS_MIDI_REVERB_MAX;
+						printf("MIDI_WHEEL_CONTROLLER_CC => %d, reverb = %f\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC], p->reverb);
+					}
+					MIDI_controllers_updated = 0;
+				}
+			}
+			if(MIDI_controllers_active_PB)
+			{
+				if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_PB_UPDATED)
+				{
+					p->texture = ((float)MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB]/127.0f) * CLOUDS_MIDI_TEXTURE_MAX;
+					printf("MIDI_WHEEL_CONTROLLER_PB => %d, texture = %f\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB], p->texture);
+					MIDI_controllers_updated = 0;
+				}
 			}
 		}
 
@@ -549,6 +774,10 @@ void clouds_main(int change_sampling_rate) {
 		#define CLOUDS_UI_CMD_DIRECT_PREVIOUS_PARAMETER		9
 		#define CLOUDS_UI_CMD_DIRECT_NEXT_PARAMETER			10
 		#define CLOUDS_UI_CMD_FREEZE						11
+		#ifdef GATE_TRIGGER_CONTROLS
+		#define CLOUDS_UI_CMD_TRIGGER						12
+		#define CLOUDS_UI_CMD_GATE							13
+		#endif
 
 		//if (sampleCounter%2==0) //sampleCounter increases slower than usual (not by every sample)
 		//{
@@ -586,10 +815,12 @@ void clouds_main(int change_sampling_rate) {
 				event_channel_options = 0;
 			}
 
+			/*
 			if(btn_event_ext)
 			{
 				printf("btn_event_ext=%d, options_menu=%d\n",btn_event_ext, options_menu);
 			}
+			*/
 
 			if(options_menu)
 			{
@@ -612,6 +843,28 @@ void clouds_main(int change_sampling_rate) {
 				//if(btn_event_ext==BUTTON_EVENT_SHORT_PRESS+BUTTON_3) { ui_command =  CLOUDS_UI_CMD_FREEZE; }
 			}
 
+			#ifdef GATE_TRIGGER_CONTROLS
+			if(!s1_trigger && SENSOR_THRESHOLD_RED_2)
+			{
+				s1_trigger = 1;
+				ui_command =  CLOUDS_UI_CMD_TRIGGER;
+			}
+			else if(s1_trigger && !SENSOR_THRESHOLD_RED_1)
+			{
+				s1_trigger = 0;
+			}
+
+			if(!s2_trigger && SENSOR_THRESHOLD_ORANGE_2)
+			{
+				s2_trigger = 1;
+				ui_command =  CLOUDS_UI_CMD_GATE;
+			}
+			else if(s2_trigger && !SENSOR_THRESHOLD_ORANGE_1)
+			{
+				s2_trigger = 0;
+			}
+			#endif
+
 			if(!s3_trigger && SENSOR_THRESHOLD_BLUE_4)
 			{
 				s3_trigger = 1;
@@ -626,17 +879,53 @@ void clouds_main(int change_sampling_rate) {
 			#endif
 		//}
 
+		#ifdef GATE_TRIGGER_CONTROLS
+		if(ui_command==CLOUDS_UI_CMD_TRIGGER)
+		{
+			if(p->trigger)
+	    	{
+	    		p->trigger = false;
+	    		printf("trigger=>0\n");
+	    		LED_R8_all_OFF();
+	    	}
+	    	else
+	    	{
+	    		p->trigger = true;
+	    		printf("trigger=>1\n");
+	    		LED_R8_set_byte(0xff);
+	    	}
+		}
+
+		if(ui_command==CLOUDS_UI_CMD_GATE)
+		{
+			if(p->gate)
+	    	{
+	    		p->gate = false;
+	    		printf("gate=>0\n");
+	    		LED_O4_all_OFF();
+	    	}
+	    	else
+	    	{
+	    		p->gate = true;
+	    		printf("gate=>1\n");
+	    		LED_O4_set_byte(0xff);
+	    	}
+		}
+		#endif
+
 		if(ui_command==CLOUDS_UI_CMD_FREEZE)
 		{
 			if(p->freeze)
 	    	{
 	    		p->freeze = false;
-	    		LED_R8_all_OFF();
+	    		//printf("freeze=>0\n");
+	    		LED_B5_all_OFF();
 	    	}
 	    	else
 	    	{
 	    		p->freeze = true;
-	    		LED_R8_set_byte(0xff);
+	    		//printf("freeze=>1\n");
+	    		LED_B5_set_byte(0xff);
 	    	}
 		}
 
@@ -782,8 +1071,9 @@ void clouds_main(int change_sampling_rate) {
 				selected_patch = 0;
 			}
 			printf("Loading patch #%d\n", selected_patch+1);
-			load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS);
-			print_params(p, 1);
+			load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS, patch_block_names[playback_mode]);
+			p->granular.stereo_spread = p->stereo_spread;
+			//print_params(p, 1);
 		}
 		if(ui_command==CLOUDS_UI_CMD_PREVIOUS_PATCH)
 		{
@@ -793,42 +1083,76 @@ void clouds_main(int change_sampling_rate) {
 				selected_patch = clouds_patches-1;
 			}
 			printf("Loading patch #%d\n", selected_patch+1);
-			load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS);
-			print_params(p, 1);
+			load_clouds_patch(selected_patch+1, (float*)p, CLOUDS_PATCHABLE_PARAMS, patch_block_names[playback_mode]);
+			p->granular.stereo_spread = p->stereo_spread;
+			//print_params(p, 1);
 		}
 
 		//printf("processor.Process()\n");
 #ifdef DYNAMIC_OBJECTS
-		processor->Process((ShortFrame*)input, (ShortFrame*)output, n);
+		processor->Process((ShortFrame*)input, (ShortFrame*)output, IO_BUFFER_SIZE);
 #else
-		processor.Process((ShortFrame*)input, (ShortFrame*)output, n);
+		processor.Process((ShortFrame*)input, (ShortFrame*)output, IO_BUFFER_SIZE);
 #endif
-		//meter.Process(processor.parameters().freeze ? output : input, n);
+		//meter.Process(processor.parameters().freeze ? output : input, IO_BUFFER_SIZE);
 
+		//printf("sound output\n");
+
+		/*
 		for(ptr=0;ptr<4*n;ptr+=4)
     	{
 			out_ptr = (char*)output+ptr;
 			#ifdef CLOUDS_FAUX_LOW_SAMPLE_RATE
-    		i2s_push_sample(I2S_NUM, out_ptr, portMAX_DELAY);
-    		sd_write_sample((uint32_t*)out_ptr);
+    		//i2s_push_sample(I2S_NUM, out_ptr, portMAX_DELAY);
+			i2s_write(I2S_NUM, (void*)out_ptr, 4, &i2s_bytes_rw, portMAX_DELAY);
+    		//sd_write_sample((uint32_t*)out_ptr);
 			#endif
-    		i2s_push_sample(I2S_NUM, out_ptr, portMAX_DELAY);
-    		sd_write_sample((uint32_t*)out_ptr);
+    		//i2s_push_sample(I2S_NUM, out_ptr, portMAX_DELAY);
+    		i2s_write(I2S_NUM, (void*)out_ptr, 4, &i2s_bytes_rw, portMAX_DELAY);
+    		//sd_write_sample((uint32_t*)out_ptr);
     	//}
-	    //for(ptr=0;ptr<4*n;ptr+=4)
+
+		//for(ptr=0;ptr<4*n;ptr+=4)
     	//{
     		//i2s_pop_sample(I2S_NUM, (char*)input+ptr, portMAX_DELAY);
 
     		#ifdef CLOUDS_FAUX_LOW_SAMPLE_RATE
-    		i2s_pop_sample(I2S_NUM, (char*)input+ptr, 2);
+    		//i2s_pop_sample(I2S_NUM, (char*)input+ptr, 2);
+    		//i2s_read(I2S_NUM, (void*)(input+ptr), 4, &i2s_bytes_rw, 2);
 			#endif
-        	if(!i2s_pop_sample(I2S_NUM, (char*)input+ptr, 2))
-    		{
-    			((uint32_t*)((char*)input+ptr))[0] = 0;
-    		}
+    		//i2s_read(I2S_NUM, (void*)(input+ptr), 4, &i2s_bytes_rw, 2);
+    		//if(!i2s_pop_sample(I2S_NUM, (char*)input+ptr, 2))
+    		//if(i2s_bytes_rw!=4)
+    		//{
+    		//	((uint32_t*)((char*)input+ptr))[0] = 0;
+    		//}
     		//float r = PseudoRNG1a_next_float();
     		//fill_with_random_value((char*)input+ptr);
     	}
+    	*/
+
+		//write IO_BUFFER_SIZE stereo samples = IO_BUFFER_SIZE*2*sizeof(uint16_t) = IO_BUFFER_SIZE*4 bytes
+		i2s_write(I2S_NUM, (void*)output, IO_BUFFER_SIZE*4, &i2s_bytes_rw, portMAX_DELAY);
+		i2s_read(I2S_NUM, (void*)input, IO_BUFFER_SIZE*4, &i2s_bytes_rw, 1);
+		sd_write_samples(output, IO_BUFFER_SIZE*4); //size in bytes (one stereo sample = 32bit)
+
+		//uint16_t input[IO_BUFFER_SIZE*2];
+
+		/*
+		//ADC_sample = ADC_sampleA[ADC_sample_ptr];
+		ADC_sample_ptr++;
+		#ifdef USE_FAUX_LOW_SAMPLE_RATE
+		ADC_sample_ptr++;
+		#endif
+
+		if(ADC_sample_ptr==ADC_SAMPLE_BUFFER)
+		{
+			//i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+			//i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
+			i2s_read(I2S_NUM, (void*)ADC_sampleA, 4*ADC_SAMPLE_BUFFER, &i2s_bytes_rw, 1);
+			ADC_sample_ptr = 0;
+		}
+		*/
 
 		//sampleCounter ++;
     }

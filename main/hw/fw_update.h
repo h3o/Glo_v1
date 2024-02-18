@@ -1,16 +1,17 @@
 /*
  * fw_update.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 27, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -61,7 +62,7 @@ void firmware_update_SD();
 //uint32_t copy_from_SD_to_Flash(FILE *f, uint32_t address, uint32_t size);
 void factory_data_load_SD();
 void factory_reset_firmware();
-void reload_config();
+int reload_config();
 
 #ifdef __cplusplus
 }
@@ -69,4 +70,4 @@ void reload_config();
 
 #endif /* BOARD_GECHO */
 
- #endif /* FW_UPDATE_H_ */
+#endif /* FW_UPDATE_H_ */

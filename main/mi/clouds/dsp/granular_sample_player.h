@@ -68,7 +68,7 @@ class GranularSamplePlayer {
   }
   
   template<Resolution resolution>
-  void Play(
+  IRAM_ATTR void Play(
       const AudioBuffer<resolution>* buffer,
       const Parameters& parameters,
       float* out, size_t size) {
@@ -164,7 +164,7 @@ class GranularSamplePlayer {
   }
   
  private:
-  int32_t FillAvailableGrainsList() {
+  IRAM_ATTR int32_t FillAvailableGrainsList() {
     int32_t num_available_grains = 0;
     for (int32_t i = 0; i < max_num_grains_; ++i) {
       if (!grains_[i].active()) {
@@ -175,7 +175,7 @@ class GranularSamplePlayer {
     return num_available_grains;
   }
   
-  void ScheduleGrain(
+  IRAM_ATTR void ScheduleGrain(
       Grain* grain,
       const Parameters& parameters,
       int32_t pre_delay,

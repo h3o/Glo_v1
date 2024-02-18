@@ -1,6 +1,8 @@
 /*
  * IIR_filters.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Apr 18, 2016
  *      Author: mario
  *
@@ -8,12 +10,11 @@
  *  Source: http://www.musicdsp.org/showone.php?id=29
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -25,14 +26,6 @@
 class IIR_Filter
 {
 public:
-	/*
-	enum FilterMode {
-		FILTER_MODE_LOWPASS = 0,
-		FILTER_MODE_HIGHPASS,
-		FILTER_MODE_BANDPASS,
-		kNumFilterModes
-	};
-	*/
 
 	IIR_Filter(void);
 	virtual ~IIR_Filter(void);
@@ -43,7 +36,8 @@ public:
 	inline void setCutoff(float newCutoff) { cutoff = newCutoff; feedbackAmount = resonance + resonance/(1.0 - cutoff); };
 	inline void setCutoffKeepFeedback(float newCutoff) { cutoff = newCutoff; };
 
-	inline void setCutoffAndLimits(float newCutoff) {
+	inline void setCutoffAndLimits(float newCutoff)
+	{
 		if(newCutoff < 0.001)
 		{
 			newCutoff = 0.247836739 / 2;
@@ -54,7 +48,8 @@ public:
 		calculateFeedbackAmount();
 	};
 
-	inline void driftCutoff(float drift) {
+	inline void driftCutoff(float drift)
+	{
 		cutoff += drift;
 		if(cutoff<cutoff_min)
 		{
@@ -79,7 +74,6 @@ public:
 	static float iir_filter_multi_sum_w_noise_and_wind(float input, IIR_Filter **iir_array, int total_filters, float *mixing_volumes, uint16_t noise, float noise_volume, int wind_voices);
 
 protected:
-//private:
 
 	float cutoff, resonance, feedbackAmount;
     float buf0,buf1,buf2,buf3;

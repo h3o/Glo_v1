@@ -1,18 +1,21 @@
 /*
- * adc.c
+ * v1_signals.c
+ *
+ *  Copyright 2024 Phonicbloom Ltd.
  *
  *  Created on: Apr 27, 2016
- *      Author: mayo
+ *      Author: mario
+ *
+ *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
+ *
+ *  Find more information at:
+ *  http://phonicbloom.com/diy/
+ *  http://gechologic.com/
+ *
  */
 
 #include "signals.h"
-//#include "kiss_fft.h"
-
-//void RNG_Config (void)
-//{
-	//RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_RNG, ENABLE);
-	//RNG_Cmd(ENABLE);
-//}
 
 double b_noise = 19.1919191919191919191919191919191919191919;
 
@@ -61,4 +64,3 @@ uint32_t PseudoRNG2_next_int32()
 	randSeed = (randSeed * 196314165) + 907633515;
 	return randSeed;
 }
-

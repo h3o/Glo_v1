@@ -1,25 +1,26 @@
 /*
  * Sensors.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: 13 Mar 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <Sensors.h>
+#include <string.h>
+
+#include "Sensors.h"
 
 #include "hw/leds.h"
 #include "hw/ui.h"
-
-#include <string.h>
 
 #ifdef BOARD_GECHO
 //#define DEBUG_IR_SENSORS
@@ -43,7 +44,7 @@ void gecho_sensors_init()
 	//AccelerometerParam.measure_delay = 5;//works with dev prototype
 	//AccelerometerParam.cycle_delay = 10;
 	printf("gecho_sensors_init(): starting process_sensors task\n");
-	xTaskCreatePinnedToCore((TaskFunction_t)&process_sensors, "process_sensors_task", 2048, NULL, 10, &sensors_task_handle, 1);
+	xTaskCreatePinnedToCore((TaskFunction_t)&process_sensors, "process_sensors_task", 2048, NULL, PRIORITY_SENSORS_TASK, &sensors_task_handle, CPU_CORE_SENSORS_TASK);
 }
 
 void process_sensors(void *pvParameters)
@@ -138,7 +139,10 @@ void process_sensors(void *pvParameters)
 			}
 
 			#ifdef DISPLAY_IR_SENSOR_LEVELS
-			display_IR_sensors_levels();
+			if(SENSORS_LEDS_indication_enabled)
+			{
+				display_IR_sensors_levels();
+			}
 			#endif
 		}
 		else

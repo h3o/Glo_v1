@@ -48,7 +48,7 @@ class DCO_Synth
 	//uint8_t *squaretable256;
 	int erase_echo = 0;
 
-	int param = 0, waveform = 1, drift_params = 0, drift_params_cnt;
+	int param = 0, waveform = 1, drift_params = 0, drift_params_cnt = 0;
 
 	int dco_oversample = 1;
 	int shift_param = 0;

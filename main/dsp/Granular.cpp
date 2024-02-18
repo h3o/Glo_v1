@@ -1,26 +1,27 @@
 /*
  * Granular.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: 19 Jan 2018
  *      Author: mario
  *
  *  As explained in the coding tutorial: http://gechologic.com/granular-sampler
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <Granular.h>
-#include <Accelerometer.h>
-#include <Sensors.h>
-#include <InitChannels.h>
-#include <MusicBox.h>
+#include "Granular.h"
+#include "Accelerometer.h"
+#include "Sensors.h"
+#include "InitChannels.h"
+#include "MusicBox.h"
 
 #include "hw/midi.h"
 #include "hw/sdcard.h"
@@ -33,7 +34,7 @@
 #define GRAIN_LENGTH_MAX	(I2S_AUDIOFREQ/2)	//memory will be allocated for up to a half second grain
 #define GRAIN_LENGTH_MIN	(I2S_AUDIOFREQ/16)	//one 16th of second will be shortest allowed grain length
 #else
-#define GRAIN_LENGTH_MAX	40000/2				//memory will be allocated for up to about 0.4 second grain
+#define GRAIN_LENGTH_MAX	18000 //max so the SD recording works = 0.354s at 50.780kHz		//40000/2	//~0.4 seconds per grain
 #define GRAIN_LENGTH_MIN	(I2S_AUDIOFREQ/40)	//one 40th of second will be shortest allowed grain length
 #endif
 
@@ -64,6 +65,7 @@ MusicBox *gran_chord = NULL;
 
 #define GRANULAR_ECHO
 //#define GRANULAR_MIX_EXT
+//#define GRANULAR_DEBUG_MIDI
 
 void update_grain_freqs(float *freq, float *bases, int voices_used, float detune)
 {
@@ -107,7 +109,7 @@ void update_grain_freqs(float *freq, float *bases, int voices_used, float detune
 	freq[26] = freq[8]/8;
 }
 
-void granular_sampler_simple()
+IRAM_ATTR void granular_sampler_simple()
 {
 	//--------------------------------------------------------------------------
 	//defines, constants and variables
@@ -170,7 +172,7 @@ void granular_sampler_simple()
 	//int freqs_updating = 0;
 
 	//program_settings_reset();
-	channel_init(0, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0); //init without any features
+	channel_init(0, 0, 0, FILTERS_TYPE_NO_FILTERS, 0, 0, 0, 0, 0, 0); //init without any features
 
 	#ifdef BOARD_WHALE
 	BUTTONS_SEQUENCE_TIMEOUT = BUTTONS_SEQUENCE_TIMEOUT_SHORT;
@@ -188,12 +190,6 @@ void granular_sampler_simple()
 	}
 	*/
 
-	/*
-	enable_out_clock();
-	mclk_enabled = 1;
-	codec_init(); //i2c init
-	*/
-
 	#ifdef SWITCH_I2C_SPEED_MODES
 	i2c_master_deinit();
     i2c_master_init(1); //fast mode
@@ -205,6 +201,8 @@ void granular_sampler_simple()
     volume_ramp = 1;
     int sample_hold = 1;//, sampling_l = 0, sampling_r = 0;
     float np;
+
+    echo_dynamic_loop_length0 = echo_dynamic_loop_length;
 
     float sample_mix_l, sample_mix_r;
 
@@ -241,11 +239,87 @@ void granular_sampler_simple()
 			}
 		}
 
+		if (TIMING_EVERY_125_MS == 11) //8Hz
+		{
+			if(midi_ctrl_cc>6 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[4] || midi_ctrl_cc_updated[5] || midi_ctrl_cc_updated[6])
+				{
+					LED_W8_all_OFF();
+					LED_B5_all_OFF();
+
+					MIDI_to_LED(midi_ctrl_cc_values[4], 1);
+					MIDI_to_LED(midi_ctrl_cc_values[5], 1);
+					MIDI_to_LED(midi_ctrl_cc_values[6], 1);
+
+					base_chord_33[0] = MIDI_note_to_freq(midi_ctrl_cc_values[4]);
+					base_chord_33[1] = MIDI_note_to_freq(midi_ctrl_cc_values[5]);
+					base_chord_33[2] = MIDI_note_to_freq(midi_ctrl_cc_values[6]);
+
+					update_grain_freqs(freq, base_chord_33, GRAIN_VOICES_MAX, detune_coeff); //update all at once
+
+					midi_ctrl_cc_updated[4] = 0;
+					midi_ctrl_cc_updated[5] = 0;
+					midi_ctrl_cc_updated[6] = 0;
+				}
+			}
+		}
+
+		if (TIMING_EVERY_125_MS == 13) //8Hz
+		{
+			if(midi_ctrl_cc>3 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[3])
+				{
+					echo_dynamic_loop_length = (int)((float)midi_ctrl_cc_values[3] / 127.0f * (float)ECHO_BUFFER_LENGTH_DEFAULT);
+					echo_dynamic_loop_length0 = echo_dynamic_loop_length;
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("midi_ctrl_cc_updated[3] = %d, midi_ctrl_cc_values[3] = %d, echo_dynamic_loop_length = %d\n", midi_ctrl_cc_updated[3], midi_ctrl_cc_values[3], echo_dynamic_loop_length);
+					#endif
+
+					midi_ctrl_cc_updated[3] = 0;
+				}
+			}
+		}
+		if (TIMING_EVERY_125_MS == 17) //8Hz
+		{
+			if(midi_ctrl_cc>7 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[7])
+				{
+					echo_dynamic_loop_length = (int)(((float)midi_ctrl_cc_values[7]) / 127.0f * (float)echo_dynamic_loop_length0);
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("midi_ctrl_cc_updated[7] = %d, midi_ctrl_cc_values[7] = %d, echo_dynamic_loop_length0 = %d, echo_dynamic_loop_length = %d\n", midi_ctrl_cc_updated[7], midi_ctrl_cc_values[7], echo_dynamic_loop_length0, echo_dynamic_loop_length);
+					#endif
+
+					midi_ctrl_cc_updated[7] = 0;
+				}
+			}
+		}
+
 		//set offset of right stereo channel against left
 		//if (TIMING_EVERY_100_MS == 43) //10Hz
 		if (TIMING_EVERY_250_MS == 43) //4Hz
 		{
-			if(PARAMETER_CONTROL_SELECTED_IRS)
+			if(midi_ctrl_cc>2 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[2])
+				{
+					np = (float)midi_ctrl_cc_values[2] / 127.0f;
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("midi_ctrl_cc_updated[2] = %d, midi_ctrl_cc_values[2] = %d, np = %f\n", midi_ctrl_cc_updated[2], midi_ctrl_cc_values[2], np);
+					#endif
+
+					if(np > 0.9f) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 2; }
+					else if(np > 0.8f) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 3; }
+					else if(np > 0.7f) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 4; }
+					else if(np > 0.6f) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 6; }
+					else { sampleCounter2 = sampleCounter1; }
+
+					midi_ctrl_cc_updated[2] = 0;
+				}
+			}
+			else if(PARAMETER_CONTROL_SELECTED_IRS)
 			{
 				if(SENSOR_THRESHOLD_ORANGE_4) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 2; }
 				else if(SENSOR_THRESHOLD_ORANGE_3) { sampleCounter2 = sampleCounter1 + GRAIN_LENGTH_MAX / 4; }
@@ -281,7 +355,16 @@ void granular_sampler_simple()
 			sampleCounter2 = 0;
 		}
 
-		i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
+		ADC_sample = ADC_sampleA[ADC_sample_ptr];
+		ADC_sample_ptr++;
+
+		if(ADC_sample_ptr==ADC_SAMPLE_BUFFER)
+		{
+			//i2s_read(I2S_NUM, (void*)&ADC_sample, 4, &i2s_bytes_rw, portMAX_DELAY);
+			i2s_read(I2S_NUM, (void*)ADC_sampleA, 4*ADC_SAMPLE_BUFFER, &i2s_bytes_rw, 1);
+			ADC_sample_ptr = 0;
+		}
+
 		//record only if not frozen
 		#ifdef BOARD_WHALE
 		if(!sample_hold)
@@ -303,7 +386,7 @@ void granular_sampler_simple()
 
 		if(!selected_song)
 		{
-			if (TIMING_EVERY_40_MS == 45) //25Hz
+			if (TIMING_EVERY_40_MS == 41) //25Hz
 			{
 				if(!midi_override && MIDI_keys_pressed)
 				{
@@ -440,19 +523,36 @@ void granular_sampler_simple()
 		#endif
 
 		//sample32 = 0; //ADC_sample; //test bypass all effects
-        i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
-        //i2s_push_sample(I2S_NUM, (char *)&ADC_sample, portMAX_DELAY); //test bypass
+        i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
         sd_write_sample(&sample32);
 
 		if (TIMING_EVERY_40_MS == 47) //25Hz
 		{
 			#ifdef BOARD_GECHO
-			if(MIDI_controllers_active_CC) //override S4 controlling # of voices when MIDI controller CC wheel active
+			if(midi_ctrl_cc>0 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[0])
+				{
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("midi_ctrl_cc_updated[0] = %d, midi_ctrl_cc_values[0] = %d\n", midi_ctrl_cc_updated[0], midi_ctrl_cc_values[0]);
+					#endif
+					grain_voices = GRAIN_VOICES_MIN + (int)(midi_ctrl_cc_values[0]/127.0f * (GRAIN_VOICES_MAX - GRAIN_VOICES_MIN));
+					midi_ctrl_cc_updated[0] = 0;
+				}
+			}
+			else if(MIDI_controllers_active_CC) //override S4 controlling # of voices when MIDI controller CC wheel active
 			{
 				if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_CC_UPDATED)
 				{
-					//printf("MIDI_WHEEL_CONTROLLER_CC => %d\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]);
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("MIDI_WHEEL_CONTROLLER_CC => %d\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]);
+					#endif
+
 					grain_voices = GRAIN_VOICES_MIN + (int)(MIDI_ctrl[MIDI_WHEEL_CONTROLLER_CC]/127.0f * (GRAIN_VOICES_MAX - GRAIN_VOICES_MIN));
+
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("grain_voices = %d\n",grain_voices);
+					#endif
 
 					MIDI_controllers_updated = 0;
 				}
@@ -494,11 +594,34 @@ void granular_sampler_simple()
 		if (TIMING_EVERY_40_MS == 49) //25Hz
 		{
 			#ifdef BOARD_GECHO
-			if(MIDI_controllers_active_PB) //override manual control of detune when MIDI controller PB wheel active
+			if(midi_ctrl_cc>1 && midi_ctrl_cc_active)
+			{
+				if(midi_ctrl_cc_updated[1])
+				{
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("midi_ctrl_cc_updated[1] = %d, midi_ctrl_cc_values[1] = %d\n", midi_ctrl_cc_updated[1], midi_ctrl_cc_values[1]);
+					#endif
+					if(midi_ctrl_cc_updated[1]>=64)
+					{
+						detune_coeff = global_settings.GRANULAR_DETUNE_COEFF_MAX * ((float)midi_ctrl_cc_values[1]-64.0f) / 64.0f;
+					}
+					//map from 0-63 MIDI values to GRANULAR_DETUNE_COEFF_MUL-0, in linear scale
+					else
+					{
+						detune_coeff = -0.15f * global_settings.GRANULAR_DETUNE_COEFF_MAX * (64.0f-(float)midi_ctrl_cc_values[1]) / 64.0f;
+					}
+
+					update_grain_freqs(freq, base_chord_33, GRAIN_VOICES_MAX, detune_coeff);
+					midi_ctrl_cc_updated[1] = 0;
+				}
+			}
+			else if(MIDI_controllers_active_PB) //override manual control of detune when MIDI controller PB wheel active
 			{
 				if(MIDI_controllers_updated==MIDI_WHEEL_CONTROLLER_PB_UPDATED)
 				{
-					//printf("MIDI_WHEEL_CONTROLLER_PB => %d\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB]);
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("MIDI_WHEEL_CONTROLLER_PB => %d\n", MIDI_ctrl[MIDI_WHEEL_CONTROLLER_PB]);
+					#endif
 
 					//ideal: map from 64-127 MIDI values to GRANULAR_DETUNE_COEFF_SET-GRANULAR_DETUNE_COEFF_MAX, in log scale
 
@@ -519,7 +642,9 @@ void granular_sampler_simple()
 					update_grain_freqs(freq, base_chord_33, GRAIN_VOICES_MAX, detune_coeff);
 					MIDI_controllers_updated = 0;
 
-					//printf("granular_sampler_simple(): detune_coeff=%f\n", detune_coeff);
+					#ifdef GRANULAR_DEBUG_MIDI
+					printf("granular_sampler_simple(): detune_coeff=%f\n", detune_coeff);
+					#endif
 				}
 			}
 			else //manual detune only enabled until MIDI controller wheels active
@@ -669,7 +794,11 @@ void granular_sampler_simple()
 			*/
 
 			//in Gecho, sample_hold is controlled either by accelerometer (z-axis) or S2
-			if(PARAMETER_CONTROL_SELECTED_IRS)
+			if(midi_ctrl_cc>2 && midi_ctrl_cc_active)
+			{
+				sample_hold = midi_ctrl_cc_values[2] > 32 ? 0:1;
+			}
+			else if(PARAMETER_CONTROL_SELECTED_IRS)
 			{
 				sample_hold = !SENSOR_THRESHOLD_ORANGE_1;
 			}

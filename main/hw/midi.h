@@ -1,16 +1,17 @@
 /*
  * midi.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Mar 25, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -19,14 +20,28 @@
 
 #include "init.h"
 
-#define MIDI_CHORD_NOTES 3
-#define MIDI_OUT_POLYPHONY 3
+#define MIDI_CHORD_NOTES	3
+#define MIDI_OUT_POLYPHONY	3
 
 extern uint8_t MIDI_last_chord[];
 extern uint8_t MIDI_last_melody_note;
 extern uint8_t MIDI_last_melody_note_velocity;
+extern uint8_t MIDI_last_note_off;
 extern uint8_t MIDI_keys_pressed, MIDI_note_on, MIDI_notes_updated, MIDI_controllers_updated, /*MIDI_controllers_active,*/ MIDI_controllers_active_PB, MIDI_controllers_active_CC;
 extern uint8_t MIDI_ctrl[];
+extern uint8_t MIDI_tempo_event;
+
+#define MIDI_CTRL_MAX_KEYS	10
+#define MIDI_CTRL_MAX_CC	12
+
+extern uint8_t midi_ctrl_cc_msg_size[MIDI_CTRL_MAX_CC];
+extern int midi_ctrl_keys, midi_ctrl_cc;
+extern uint16_t midi_ctrl_keys_map[MIDI_CTRL_MAX_KEYS], midi_ctrl_cc_map[MIDI_CTRL_MAX_CC];
+
+extern uint8_t midi_ctrl_cc_values[MIDI_CTRL_MAX_CC], midi_ctrl_keys_values[MIDI_CTRL_MAX_KEYS];
+extern int midi_ctrl_cc_updated[MIDI_CTRL_MAX_CC], midi_ctrl_keys_updated[MIDI_CTRL_MAX_KEYS];
+extern int midi_ctrl_cc_active, midi_ctrl_keys_active;
+
 
 //https://ccrma.stanford.edu/~craig/articles/linuxmidi/misc/essenmidi.html
 //Command	Meaning					# parameters	param 1			param 2
@@ -117,8 +132,15 @@ void gecho_stop_receive_MIDI();
 void MIDI_parser_reset();
 
 float MIDI_note_to_freq(int8_t note);
+float MIDI_note_to_freq_ft(float note);
 void MIDI_to_LED(int note, int on_off);
-int MIDI_to_note(int8_t midi_note, char *buf);
+int MIDI_to_note(int8_t midi_note, char *buf); //note and octave
+int MIDI_to_note_only(int8_t midi_note, char *buf); //only note, without octave
+
+void setup_MIDI_controls();
+void reset_MIDI_controls();
+int load_midi_controller_configuration();
+int store_midi_controller_configuration();
 
 #ifdef __cplusplus
 }

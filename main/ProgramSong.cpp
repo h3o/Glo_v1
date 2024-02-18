@@ -1,38 +1,37 @@
 /*
  * ProgramSong.cpp
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Nov 00, 2019
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
-#include <ProgramSong.h>
-#include <InitChannels.h>
-#include <FilteredChannels.h>
-
-#include <Interface.h>
-#include <hw/codec.h>
-#include <hw/midi.h>
-#include <hw/leds.h>
-#include <hw/sdcard.h>
-#include <hw/gpio.h>
-//#include <dsp/FreqDetect.h>
-#include <dsp/Filters.h>
-
 #include <string.h>
+
+#include "ProgramSong.h"
+#include "FilteredChannels.h"
+#include "InitChannels.h"
+#include "Interface.h"
+#include "hw/codec.h"
+#include "hw/midi.h"
+#include "hw/leds.h"
+#include "hw/sdcard.h"
+#include "hw/gpio.h"
+#include "dsp/Filters.h"
+
 
 void program_song(int action)
 {
     printf("program_song(): action = %d\n", action);
-	//song = new MusicBox(0);
 
 	if(action==PROGRAM_SONG_ACTION_NEW)
 	{
@@ -71,7 +70,6 @@ void program_song(int action)
 			channel_running = 1;
 			volume_ramp = 1;
 			int done = 0;
-
 
 			while(!event_next_channel && !done)
 			{
@@ -208,11 +206,6 @@ int preview_chord_running = 0;
 
 void display_chord_position()
 {
-	//int current_chord = 0;
-	//int temp_total_chords = 8; //can be 1-8 with multiplier 1-4 (so, total of 1-32)
-	//int total_chords_row1 = 8;
-	//int total_chords_row2 = 1;
-
 	LED_R8_all_OFF();
 
 	//light up a Red LED according to current chord's position
@@ -352,11 +345,13 @@ int set_number_of_chords() //define number of chords
 					total_chords_row2 = 1;
 				}
 			}
-			/*if(button_pressed == 4) //U4 button pressed -> set defaults
+			/*
+			if(button_pressed == 4) //U4 button pressed -> set defaults
 			{
 				total_chords_row1 = 8;
 				total_chords_row2 = 1;
-			}*/
+			}
+			*/
 
 			display_number_of_chords(total_chords_row1, total_chords_row2);
 
@@ -404,6 +399,7 @@ void goto_next_chord()
 }
 
 int chord_blink_timer = 0;
+
 void blink_current_chord(int chord)
 {
 	if(chord_blink_timer==0)
@@ -441,7 +437,7 @@ void start_playing_current_chord(int (*temp_song)[NOTES_PER_CHORD], int current_
 	}
 }
 
-#define FEED_DAC_WITH_SILENCE sample32=0;i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY)
+#define FEED_DAC_WITH_SILENCE sample32=0;i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY)
 
 void change_current_chord(int (*temp_song)[NOTES_PER_CHORD], int direction, int alteration)
 {
@@ -563,9 +559,6 @@ void start_preview_chord(int *notes, int notes_per_chord)
 		return;
 	}
 
-	//codec_reset(); //in case it was just running
-	//int running = 1;
-
 	//FEED_DAC_WITH_SILENCE;
 	preview_chord_running = 0; //stop previous preview if still running
 
@@ -627,13 +620,13 @@ void start_preview_chord(int *notes, int notes_per_chord)
 	for(int t=0;t<CHORD_MAX_VOICES;t++)
 	{
 		//FEED_DAC_WITH_SILENCE;
-		if(fil->chord->expand_multipliers[t][1] > 0)
+		if(fil->musicbox->expand_multipliers[t][1] > 0)
 		{
-			bases_expanded[t] = bases[fil->chord->expand_multipliers[t][0]] * (float)fil->chord->expand_multipliers[t][1];
+			bases_expanded[t] = bases[fil->musicbox->expand_multipliers[t][0]] * (float)fil->musicbox->expand_multipliers[t][1];
 		}
 		else
 		{
-			bases_expanded[t] = bases[fil->chord->expand_multipliers[t][0]] / (float)(-fil->chord->expand_multipliers[t][1]);
+			bases_expanded[t] = bases[fil->musicbox->expand_multipliers[t][0]] / (float)(-fil->musicbox->expand_multipliers[t][1]);
 		}
 		//if(bases_expanded[t]>5000)
 		//{
@@ -695,7 +688,6 @@ int count_unset_chords()
 	return unset;
 }
 
-//int preview_chord_mute = 0;
 void process_preview_chord()
 {
 	float r;
@@ -704,23 +696,18 @@ void process_preview_chord()
 	{
 		if (!(sampleCounter & 0x00000001)) //left or right channel
 		{
-			r = PseudoRNG1a_next_float();
-			memcpy(&random_value, &r, sizeof(random_value));
+			new_random_value();
 		}
-
-		//printf("[x]");
 
 		if (sampleCounter & 0x00000001) //left or right channel
 		{
 			sample_f[0] = ( (float)(32768 - (int16_t)random_value) / 32768.0f) * noise_volume;
 			sample_mix = IIR_Filter::iir_filter_multi_sum(sample_f[0],fil->iir2,FILTERS/2,fil->fp.mixing_volumes)*MAIN_VOLUME; //volume2;
-			//sample_mix = sample_f[0] * volume2 / 5;
 		}
 		else
 		{
 			sample_f[1] = ( (float)(32768 - (int16_t)(random_value>>16)) / 32768.0f) * noise_volume;
 			sample_mix = IIR_Filter::iir_filter_multi_sum(sample_f[1],fil->iir2+FILTERS/2,FILTERS/2,fil->fp.mixing_volumes+FILTERS/2)*MAIN_VOLUME; //volume2;
-			//sample_mix = sample_f[1] * volume2 / 5;
 		}
 
 		sample_i16 = (int16_t)(sample_mix * SAMPLE_VOLUME);
@@ -733,24 +720,9 @@ void process_preview_chord()
 		{
 			sample32 += sample_i16;
 
-			i2s_push_sample(I2S_NUM, (char *)&sample32, portMAX_DELAY);
+			i2s_write(I2S_NUM, (void*)&sample32, 4, &i2s_bytes_rw, portMAX_DELAY);
 		    //sd_write_sample(&sample32);
-
-			//i2s_pop_sample(I2S_NUM, (char*)&ADC_sample, portMAX_DELAY);
 		}
-
-		/*
-		while (!SPI_I2S_GetFlagStatus(CODEC_I2S, SPI_I2S_FLAG_TXE)) {};
-		//if(preview_chord_mute)
-		//{
-		//	SPI_I2S_SendData(CODEC_I2S, 0);
-		//	preview_chord_mute--;
-		//}
-		//else
-		//{
-			SPI_I2S_SendData(CODEC_I2S, sample_i16);
-		//}
-		*/
 
 		sampleCounter++;
 
@@ -762,11 +734,7 @@ void process_preview_chord()
 			if(seconds == 2)
 			{
 				preview_chord_running = 0;
-				//codec_reset();
 				codec_set_mute(1); //stop the sound so there is no buzzing
-
-				//turn off codec volume
-				//mute_master_playback(1);
 
 				seconds = 0;
 			}
@@ -775,7 +743,6 @@ void process_preview_chord()
 	else
 	{
 		FEED_DAC_WITH_SILENCE;
-		//preview_chord_mute = 10000;
 	}
 }
 
@@ -866,7 +833,7 @@ int get_button_combination()
 				}
 			}
 		}
-		else //???
+		else
 		{
 			button_pressed_timing[i] = 0;
 		}
@@ -899,7 +866,7 @@ int edit_chords_by_buttons()
 	else
 	{
 		//params: bg_sample,song,melody,filters_type,resonance,enable_mclk,wind_voices,active_filter_pairs...
-		channel_init(0, 1000, 0, FILTERS_TYPE_LOW_PASS, FILTERS_RESONANCE_DEFAULT, 0, 0, ACTIVE_FILTER_PAIRS_ALL);
+		channel_init(0, 1000, 0, FILTERS_TYPE_LOW_PASS, FILTERS_RESONANCE_DEFAULT, 0, 0, ACTIVE_FILTER_PAIRS_ALL, 0, 0);
 		printf("edit_chords_by_buttons(): channel_init() completed\n");
 
 	    channel_running = 0;
@@ -933,12 +900,6 @@ int edit_chords_by_buttons()
 	printf("edit_chords_by_buttons(): wait_till_all_buttons_released()\n");
 	wait_till_all_buttons_released();
 
-    /*
-	channel_running = 1;
-    volume_ramp = 1;
-    ui_button3_enabled = 0;
-    ui_button4_enabled = 0;
-    */
 	codec_set_mute(0); //un-mute the codec
 
 	printf("edit_chords_by_buttons(): while(!finished)\n");
@@ -952,7 +913,6 @@ int edit_chords_by_buttons()
 		{
 			printf("edit_chords_by_buttons(): button_pressed = %d\n", button_pressed);
 
-			//???????????????????????????????????????????????????????????????
 			if(button_pressed > 10)
 			{
 				//while(any_button_held()) //wait till all released, while feeding the DAC
@@ -1017,12 +977,6 @@ int edit_chords_by_buttons()
 				printf("edit_chords_by_buttons(): RST pressed, exiting\n");
 				finished = 2;
 			}
-
-			//process_preview_chord();
-
-			/*
-			blink_current_chord(current_chord);
-			*/
 		}
 
 		process_preview_chord();
@@ -1049,4 +1003,3 @@ int edit_chords_by_buttons()
 	}
 	return 1;
 }
-

@@ -1,16 +1,17 @@
 /*
  * leds.c
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Jun 21, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -27,6 +28,8 @@ int sensor_active[4] = {0,0,0,0};
 
 int sequencer_LEDs_timing_seq = 0;
 uint8_t binaural_LEDs_timing_seq = 0;
+
+int SENSORS_LEDS_indication_enabled = 1;
 
 void LED_sequencer_indicators() //int current_chord, int total_chords)
 {
@@ -177,6 +180,15 @@ void LED_W8_all_OFF()
 	LED_W8_7_OFF;
 }
 
+void LED_B5_all_ON()
+{
+	LED_B5_0_ON;
+	LED_B5_1_ON;
+	LED_B5_2_ON;
+	LED_B5_3_ON;
+	LED_B5_4_ON;
+}
+
 void LED_B5_all_OFF()
 {
 	LED_B5_0_OFF;
@@ -184,6 +196,14 @@ void LED_B5_all_OFF()
 	LED_B5_2_OFF;
 	LED_B5_3_OFF;
 	LED_B5_4_OFF;
+}
+
+void LED_O4_all_ON()
+{
+	LED_O4_0_ON;
+	LED_O4_1_ON;
+	LED_O4_2_ON;
+	LED_O4_3_ON;
 }
 
 void LED_O4_all_OFF()
@@ -213,8 +233,6 @@ void LEDs_all_OFF()
 	LED_O4_all_OFF();
 	LED_R8_all_OFF();
 }
-
-
 
 void LED_R8_set(int led, int status)
 {
@@ -269,6 +287,42 @@ void LED_O4_set(int led, int status)
 	if(led==3)
 	{
 		status ? (LED_O4_3_ON) : (LED_O4_3_OFF);
+	}
+}
+
+void LED_W8_set(int led, int status)
+{
+	if(led==0)
+	{
+		status ? (LED_W8_0_ON) : (LED_W8_0_OFF);
+	}
+	if(led==1)
+	{
+		status ? (LED_W8_1_ON) : (LED_W8_1_OFF);
+	}
+	if(led==2)
+	{
+		status ? (LED_W8_2_ON) : (LED_W8_2_OFF);
+	}
+	if(led==3)
+	{
+		status ? (LED_W8_3_ON) : (LED_W8_3_OFF);
+	}
+	if(led==4)
+	{
+		status ? (LED_W8_4_ON) : (LED_W8_4_OFF);
+	}
+	if(led==5)
+	{
+		status ? (LED_W8_5_ON) : (LED_W8_5_OFF);
+	}
+	if(led==6)
+	{
+		status ? (LED_W8_6_ON) : (LED_W8_6_OFF);
+	}
+	if(led==7)
+	{
+		status ? (LED_W8_7_ON) : (LED_W8_7_OFF);
 	}
 }
 
@@ -363,6 +417,101 @@ void all_LEDs_test() // todo: combine w noise
 	//while(led_test_counter < 700000) {
 	while(!event_next_channel)
 	{
+		#ifdef BOARD_GECHO_V179
+
+		#define LED_TEST_DELAY 150
+
+		//may conflict with MIDI
+		//LED_SIG_ON;
+		//Delay(LED_TEST_DELAY);
+		//LED_SIG_OFF;
+
+		LED_W8_0_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_0_OFF;
+
+		LED_W8_1_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_1_OFF;
+
+		LED_W8_2_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_2_OFF;
+
+		LED_W8_3_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_3_OFF;
+
+		LED_W8_4_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_4_OFF;
+
+		LED_W8_5_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_5_OFF;
+
+		LED_W8_6_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_6_OFF;
+
+		LED_W8_7_ON;
+		Delay(LED_TEST_DELAY);
+		LED_W8_7_OFF;
+
+		LED_B5_0_ON;
+		Delay(LED_TEST_DELAY);
+		LED_B5_0_OFF;
+
+		LED_B5_1_ON;
+		Delay(LED_TEST_DELAY);
+		LED_B5_1_OFF;
+
+		LED_B5_2_ON;
+		Delay(LED_TEST_DELAY);
+		LED_B5_2_OFF;
+
+		LED_B5_3_ON;
+		Delay(LED_TEST_DELAY);
+		LED_B5_3_OFF;
+
+		LED_B5_4_ON;
+		Delay(LED_TEST_DELAY);
+		LED_B5_4_OFF;
+
+		LED_R8_0_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_0_OFF;
+
+		LED_R8_1_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_1_OFF;
+
+		LED_R8_2_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_2_OFF;
+
+		LED_R8_3_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_3_OFF;
+
+		LED_R8_4_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_4_OFF;
+
+		LED_R8_5_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_5_OFF;
+
+		LED_R8_6_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_6_OFF;
+
+		LED_R8_7_ON;
+		Delay(LED_TEST_DELAY);
+		LED_R8_7_OFF;
+
+		#else //!BOARD_GECHO_V179
+
 		led_test_counter++;
 
 		if(led_test_counter%1000000==0){
@@ -482,8 +631,11 @@ void all_LEDs_test() // todo: combine w noise
 			LED_B5_4_ON;
 		}
 
+		#endif //BOARD_GECHO_V179
+
 		//check_for_reset();
 	}
+
 	channel_running = 0;
 }
 
@@ -492,11 +644,11 @@ void all_LEDs_test() // todo: combine w noise
 void all_LEDs_test_seq1()
 {
 	//reset all GPIOs in case some shared ones may be allocated e.g. for USART
-//	#ifdef CAN_BLOCK_SWD_DEBUG
-//		GPIO_Init_all(true);
-//	#else
-//		GPIO_Init_all(false);
-//	#endif
+	//	#ifdef CAN_BLOCK_SWD_DEBUG
+	//		GPIO_Init_all(true);
+	//	#else
+	//		GPIO_Init_all(false);
+	//	#endif
 
 	LED_R8_all_OFF();
 	LED_O4_all_OFF();
@@ -624,17 +776,18 @@ void all_LEDs_test_seq1()
 
 		LED_SIG_OFF;
 	}
+
 	channel_running = 0;
 }
 
 void all_LEDs_test_seq2()
 {
 	//reset all GPIOs in case some shared ones may be allocated e.g. for USART
-//	#ifdef CAN_BLOCK_SWD_DEBUG
-//		GPIO_Init_all(true);
-//	#else
-//		GPIO_Init_all(false);
-//	#endif
+	//	#ifdef CAN_BLOCK_SWD_DEBUG
+	//		GPIO_Init_all(true);
+	//	#else
+	//		GPIO_Init_all(false);
+	//	#endif
 
 	LED_R8_all_OFF();
 	LED_O4_all_OFF();
@@ -749,6 +902,7 @@ void all_LEDs_test_seq2()
 		Delay(LED_TEST_DELAY);
 		LED_W8_7_ON;
 	}
+
 	channel_running = 0;
 }
 
@@ -910,30 +1064,6 @@ void ack_by_signal_LED()
 		LED_SIG_OFF;
 		Delay(20);
 	}
-}
-
-void display_code_challenge(uint32_t *code)
-{
-	/*
-	#ifdef GECHO_V2
-	GPIOB->BSRRH = 0x00ef;				//all RED LEDs off (GPIOB 0..7) except 4 (5th LED)
-	GPIOB->BSRRL = code[0];				//some RED LEDs on
-	GPIOA->BSRRH = 0x0080;				//all RED LEDs off (GPIOB 0..7) 5th LED is on PA7
-	GPIOA->BSRRL = (code[0]<<3) & 0x0080;	//some RED LEDs on
-	#else
-	GPIOB->BSRRH = 0x00ff;				//all RED LEDs off (GPIOB 0..7)
-	GPIOB->BSRRL = code[0];				//some RED LEDs on
-	#endif
-
-	GPIOB->BSRRH = 0x3c00;				//all ORANGE LEDs off (GPIOB 10..13)
-	GPIOB->BSRRL = code[1] & 0x3c00; 	//some ORANGE LEDs on
-
-	GPIOC->BSRRL = 0x0370;				//all BLUE LEDs off (GPIOC 4,5,6,8,9)
-	GPIOC->BSRRH = code[2] & 0x0370; 	//some BLUE LEDs on
-
-	GPIOA->BSRRL = 0xff00;				//all WHITE LEDs off (GPIOA 8..15)
-	GPIOA->BSRRH = code[3] & 0xff00; 	//some WHITE LEDs on
-	*/
 }
 
 void display_volume_level_indicator_f(float value, float min, float max)
@@ -1545,4 +1675,4 @@ void LED_sequencer_indicate_position(int chord)
 	LED_O4_set_byte(1<<((chord/8)%4));
 }
 
-#endif
+#endif //BOARD_GECHO

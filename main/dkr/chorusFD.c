@@ -52,7 +52,7 @@ static monochorus_t		delR  _CCM_ , delL  _CCM_ ; // 2 fractional delay lines
 float rateCoeff;
 
 /*-------------------------------------------------------------------------------------------*/
-float Lfo_SampleCompute(Lfo_t * op) // ! returns a positive value between 0 and op.amp !
+IRAM_ATTR float Lfo_SampleCompute(Lfo_t * op) // ! returns a positive value between 0 and op.amp !
 {
 	float z;
 
@@ -309,7 +309,7 @@ float Delay_get_mix(monochorus_t *del )
 	return del->mix;
 }
 /*-------------------------------------------------------------------------------------------*/
-void delay_write (monochorus_t *del, float xin)
+IRAM_ATTR void delay_write (monochorus_t *del, float xin)
 {
 	del->dline[del->in_idx] = xin;
 
@@ -318,7 +318,7 @@ void delay_write (monochorus_t *del, float xin)
 		del->in_idx = 0;
 }
 /*-------------------------------------------------------------------------------------------*/
-float delay_read (monochorus_t *del, float delay) // "delay" is a floating point number of samples
+IRAM_ATTR float delay_read (monochorus_t *del, float delay) // "delay" is a floating point number of samples
 {
 	float d;		// true requested delay (floating point number of samples)
 	float f;		// fractional part of delay
@@ -364,7 +364,7 @@ float delay_read (monochorus_t *del, float delay) // "delay" is a floating point
 }
 /*---------------------------------------------------------------------------------------------*/
 
-float mono_chorus_compute(monochorus_t *del, Lfo_t *lfo, float xin)
+IRAM_ATTR float mono_chorus_compute(monochorus_t *del, Lfo_t *lfo, float xin)
 {
 	float yout;
 	float x1;
@@ -389,7 +389,7 @@ float mono_chorus_compute(monochorus_t *del, Lfo_t *lfo, float xin)
 
 /*--------------------This is the main stereo chorus function : ----------------------------*/
 
-void stereoChorus_compute (float * left_out, float * right_out, float in)
+IRAM_ATTR void stereoChorus_compute (float * left_out, float * right_out, float in)
 {
 	*left_out = mono_chorus_compute(&delL, &lfoL, in);
 	*right_out = mono_chorus_compute(&delR, &lfoR, in);

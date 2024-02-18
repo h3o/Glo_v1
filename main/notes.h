@@ -1,16 +1,17 @@
 /*
  * notes.h
  *
+ *  Copyright 2024 Phonicbloom Ltd.
+ *
  *  Created on: Oct 31, 2016
  *      Author: mario
  *
  *  This file is part of the Gecho Loopsynth & Glo Firmware Development Framework.
- *  It can be used within the terms of CC-BY-NC-SA license.
- *  It must not be distributed separately.
+ *  It can be used within the terms of GNU GPLv3 license: https://www.gnu.org/licenses/gpl-3.0.en.html
  *
  *  Find more information at:
  *  http://phonicbloom.com/diy/
- *  http://gechologic.com/gechologists/
+ *  http://gechologic.com/
  *
  */
 
@@ -41,9 +42,6 @@ int tmp_song_find_note(int note, char *buffer);
 
 int translate_intervals_to_notes(char *buffer, char chord_code, char *fragment);
 int interval_to_note(char *buffer, int distance);
-
-//void set_progression_str(char *chord_progression);
-//void set_melody_str(char *melody);
 
 void notes_to_LEDs(int *notes, int8_t *leds, int notes_per_chord);
 int parse_notes(char *base_notes_buf, float *bases_parsed_buf, int8_t *led_indicators_buf, uint8_t *midi_notes_buf);
